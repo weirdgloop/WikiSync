@@ -63,7 +63,6 @@ public class WikiDumperPlugin extends Plugin
 	{
 		log.info("Wiki Dumper started!");
 		dataManager.getManifest();
-
 	}
 
 	@Override
@@ -82,12 +81,18 @@ public class WikiDumperPlugin extends Plugin
 		dataManager.submitToAPI();
 	}
 
+	private static boolean allowDump = true;
 	@Subscribe
 	public void onGameStateChanged(GameStateChanged gameStateChanged)
 	{
-		if (gameStateChanged.getGameState() == GameState.LOGGED_IN)
+		if (gameStateChanged.getGameState() == GameState.LOGGING_IN)
 		{
-			client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Wiki Dumper says " + config.greeting(), null);
+			allowDump = true;
+		}
+		if (gameStateChanged.getGameState() == GameState.LOGGED_IN  && allowDump)
+		{
+			allowDump = false;
+			loadInitialData();
 		}
 	}
 
@@ -127,6 +132,19 @@ public class WikiDumperPlugin extends Plugin
 			}
 			return true;
 		});
+	}
+
+	private void loadInitialData()
+	{
+		for(int varbIndex : varbitsToCheck)
+		{
+			dataManager.storeVarbitChanged(varbIndex, client.getVarbitValue(varbIndex));
+		}
+
+		for(int varpIndex : varpsToCheck)
+		{
+			dataManager.storeVarpChanged(varpIndex, client.getVarpValue(varpIndex));
+		}
 	}
 
 	@Subscribe
