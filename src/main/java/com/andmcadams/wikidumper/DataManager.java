@@ -38,7 +38,7 @@ import java.util.Map;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.extern.slf4j.Slf4j;
-import static net.runelite.http.api.RuneLiteAPI.GSON;
+import net.runelite.api.Client;
 import okhttp3.Call;
 import okhttp3.Callback;
 import okhttp3.MediaType;
@@ -58,6 +58,8 @@ public class DataManager
 	private static final String MANIFEST_ENDPOINT = "http://localhost:8000/manifest";
 	private static final String POST_ENDPOINT = "http://localhost:8000/change";
 
+	@Inject
+	private Client client;
 
 	@Inject
 	private OkHttpClient okHttpClient;
@@ -68,14 +70,15 @@ public class DataManager
 	@Inject
 	private WikiDumperPlugin plugin;
 
-	private Map<String, Integer> data = new HashMap<>();
+	private HashMap<Integer, Integer> varbData = new HashMap<>();
+	private HashMap<Integer, Integer> varpData = new HashMap<>();
 
 	public void storeVarbitChanged(int varbIndex, int varbValue)
 	{
 		log.info("Stored varb with index " + varbIndex + " and value " + varbValue);
 		synchronized (this)
 		{
-			data.put("varb_"+varbIndex, varbValue);
+			varbData.put(varbIndex, varbValue);
 		}
 	}
 
@@ -84,28 +87,55 @@ public class DataManager
 		log.info("Stored varp with index " + varpIndex + " and value " + varpValue);
 		synchronized (this)
 		{
-			data.put("varp_"+varpIndex, varpValue);
+			varpData.put(varpIndex, varpValue);
 		}
+	}
+
+	private <K, V> HashMap<K, V> clearChanges(HashMap<K, V> h)
+	{
+		HashMap<K, V> temp = new HashMap<>();
+		synchronized (this)
+		{
+			if (h.isEmpty())
+			{
+				return temp;
+			}
+			temp = (HashMap<K, V>) h.clone();
+			h.clear();
+		}
+		return temp;
+	}
+
+	private boolean hasDataToPush()
+	{
+		return !(varbData.isEmpty() && varpData.isEmpty());
+	}
+
+	private String convertToJson()
+	{
+		HashMap<Integer, Integer> tempVarbData = clearChanges(varbData);
+		HashMap<Integer, Integer> tempVarpData = clearChanges(varpData);
+
+		JsonObject j = new JsonObject();
+		j.add("varb", gson.toJsonTree(tempVarbData));
+		j.add("varp", gson.toJsonTree(tempVarpData));
+
+		JsonObject parent = new JsonObject();
+		parent.addProperty("username", client.getLocalPlayer().getName());
+		parent.add("data", j);
+
+		return parent.toString();
 	}
 
 	protected void submitToAPI()
 	{
-		Map<String, Integer> temp;
-		synchronized (this)
-		{
-			if (data.isEmpty())
-			{
-				return;
-			}
-			temp = data;
-			data = new HashMap<>();
-		}
-
+		if (!hasDataToPush())
+			return;
 
 		log.info("Submitting changed data to endpoint");
 		Request r = new Request.Builder()
 			.url(POST_ENDPOINT)
-			.post(RequestBody.create(JSON, gson.toJson(temp)))
+			.post(RequestBody.create(JSON, convertToJson()))
 			.build();
 
 		okHttpClient.newCall(r).enqueue(new Callback()
