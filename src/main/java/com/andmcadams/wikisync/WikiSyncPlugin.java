@@ -1,22 +1,17 @@
-package com.andmcadams.wikidumper;
+package com.andmcadams.wikisync;
 
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
-import com.google.gson.Gson;
-import com.google.gson.JsonObject;
 import com.google.inject.Provides;
 import java.time.temporal.ChronoUnit;
-import java.util.HashMap;
 import java.util.HashSet;
 import javax.inject.Inject;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.IndexDataBase;
 import net.runelite.api.VarbitComposition;
-import net.runelite.api.events.CommandExecuted;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.client.callback.ClientThread;
@@ -28,9 +23,9 @@ import net.runelite.client.task.Schedule;
 
 @Slf4j
 @PluginDescriptor(
-	name = "Wiki Dumper"
+	name = "WikiSync"
 )
-public class WikiDumperPlugin extends Plugin
+public class WikiSyncPlugin extends Plugin
 {
 	@Inject
 	private Client client;
@@ -39,7 +34,7 @@ public class WikiDumperPlugin extends Plugin
 	private ClientThread clientThread;
 
 	@Inject
-	private WikiDumperConfig config;
+	private WikiSyncConfig config;
 
 	@Inject
 	private DataManager dataManager;
@@ -61,14 +56,14 @@ public class WikiDumperPlugin extends Plugin
 	@Override
 	protected void startUp() throws Exception
 	{
-		log.info("Wiki Dumper started!");
+		log.info("WikiSync started!");
 		dataManager.getManifest();
 	}
 
 	@Override
 	protected void shutDown() throws Exception
 	{
-		log.info("Wiki Dumper stopped!");
+		log.info("WikiSync stopped!");
 	}
 
 	@Schedule(
@@ -175,8 +170,8 @@ public class WikiDumperPlugin extends Plugin
 	}
 
 	@Provides
-	WikiDumperConfig provideConfig(ConfigManager configManager)
+	WikiSyncConfig provideConfig(ConfigManager configManager)
 	{
-		return configManager.getConfig(WikiDumperConfig.class);
+		return configManager.getConfig(WikiSyncConfig.class);
 	}
 }

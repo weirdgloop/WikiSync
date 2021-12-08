@@ -23,7 +23,7 @@ dependencies {
 	testImplementation group: 'net.runelite', name:'jshell', version: runeLiteVersion
 }
 
-group = 'com.andmcadams.wikidumper'
+group = 'com.andmcadams.wikisync'
 version = '0.1'
 sourceCompatibility = '1.8'
 

@@ -1,11 +1,11 @@
-package com.andmcadams.wikidumper;
+package com.andmcadams.wikisync;
 
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
 
-@ConfigGroup("wikidumper")
-public interface WikiDumperConfig extends Config
+@ConfigGroup("wikisync")
+public interface WikiSyncConfig extends Config
 {
 	@ConfigItem(
 		keyName = "greeting",

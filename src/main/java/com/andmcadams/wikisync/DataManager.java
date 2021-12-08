@@ -23,7 +23,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-package com.andmcadams.wikidumper;
+package com.andmcadams.wikisync;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
@@ -34,7 +34,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Map;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.extern.slf4j.Slf4j;
@@ -69,7 +68,7 @@ public class DataManager
 	private Gson gson;
 
 	@Inject
-	private WikiDumperPlugin plugin;
+	private WikiSyncPlugin plugin;
 
 	private HashMap<Integer, Integer> varbData = new HashMap<>();
 	private HashMap<Integer, Integer> varpData = new HashMap<>();
@@ -198,8 +197,8 @@ public class DataManager
 							JsonObject j = new Gson().fromJson(response.body().string(), JsonObject.class);
 							try
 							{
-								WikiDumperPlugin.setVarbitsToCheck(parseSet(j.getAsJsonArray("varbits")));
-								WikiDumperPlugin.setVarpsToCheck(parseSet(j.getAsJsonArray("varps")));
+								WikiSyncPlugin.setVarbitsToCheck(parseSet(j.getAsJsonArray("varbits")));
+								WikiSyncPlugin.setVarpsToCheck(parseSet(j.getAsJsonArray("varps")));
 							}
 							catch (NullPointerException e) {
 								// This is probably an issue with the server. "varbits" or "varps" might be missing.
