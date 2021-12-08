@@ -55,8 +55,8 @@ public class DataManager
 	private static ArrayList<Integer> varbitsToSend;
 	private static ArrayList<Integer> varpsToSend;
 	// TODO: Change this to point to the live URL
-	private static final String MANIFEST_ENDPOINT = "http://localhost:8000/manifest";
-	private static final String POST_ENDPOINT = "http://localhost:8000/change";
+	private static final String MANIFEST_ENDPOINT = "https://sync.runescape.wiki/runelite/manifest";
+	private static final String POST_ENDPOINT = "https://sync.runescape.wiki/runelite/submit";
 
 	@Inject
 	private Client client;
@@ -129,7 +129,7 @@ public class DataManager
 
 	protected void submitToAPI()
 	{
-		if (!hasDataToPush())
+		if (!hasDataToPush() || client.getLocalPlayer() == null || client.getLocalPlayer().getName() == null)
 			return;
 
 		log.info("Submitting changed data to endpoint");
@@ -198,7 +198,7 @@ public class DataManager
 							}
 							catch (NullPointerException e) {
 								// This is probably an issue with the server. "varbits" or "varps" might be missing.
-								log.error("Manifest possibly missing from /manifest call");
+								log.error("Manifest possibly missing varbits or varps entry from /manifest call");
 								log.error(e.getLocalizedMessage());
 							}
 							catch (ClassCastException e) {
