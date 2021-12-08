@@ -39,6 +39,7 @@ import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
+import net.runelite.client.config.RuneScapeProfileType;
 import okhttp3.Call;
 import okhttp3.Callback;
 import okhttp3.MediaType;
@@ -122,6 +123,7 @@ public class DataManager
 
 		JsonObject parent = new JsonObject();
 		parent.addProperty("username", client.getLocalPlayer().getName());
+		parent.addProperty("profile", RuneScapeProfileType.getCurrent(client).name());
 		parent.add("data", j);
 
 		return parent.toString();
@@ -130,6 +132,9 @@ public class DataManager
 	protected void submitToAPI()
 	{
 		if (!hasDataToPush() || client.getLocalPlayer() == null || client.getLocalPlayer().getName() == null)
+			return;
+
+		if (RuneScapeProfileType.getCurrent(client) == RuneScapeProfileType.BETA)
 			return;
 
 		log.info("Submitting changed data to endpoint");
