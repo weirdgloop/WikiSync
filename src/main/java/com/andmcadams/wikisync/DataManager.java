@@ -52,9 +52,6 @@ import okhttp3.Response;
 public class DataManager
 {
 	private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
-	private static ArrayList<Integer> varbitsToSend;
-	private static ArrayList<Integer> varpsToSend;
-	// TODO: Change this to point to the live URL
 	private static final String MANIFEST_ENDPOINT = "https://sync.runescape.wiki/runelite/manifest";
 	private static final String POST_ENDPOINT = "https://sync.runescape.wiki/runelite/submit";
 
