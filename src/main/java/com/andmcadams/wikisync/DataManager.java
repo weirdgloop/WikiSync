@@ -31,11 +31,11 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonSyntaxException;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import javax.inject.Inject;
 import javax.inject.Singleton;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.client.config.RuneScapeProfileType;
@@ -67,8 +67,8 @@ public class DataManager
 	@Inject
 	private WikiSyncPlugin plugin;
 
-	private HashMap<Integer, Integer> varbData = new HashMap<>();
-	private HashMap<Integer, Integer> varpData = new HashMap<>();
+	private final HashMap<Integer, Integer> varbData = new HashMap<>();
+	private final HashMap<Integer, Integer> varpData = new HashMap<>();
 
 	public void storeVarbitChanged(int varbIndex, int varbValue)
 	{
@@ -90,14 +90,14 @@ public class DataManager
 
 	private <K, V> HashMap<K, V> clearChanges(HashMap<K, V> h)
 	{
-		HashMap<K, V> temp = new HashMap<>();
+		HashMap<K, V> temp;
 		synchronized (this)
 		{
 			if (h.isEmpty())
 			{
-				return temp;
+				return new HashMap<>();
 			}
-			temp = (HashMap<K, V>) h.clone();
+			temp = new HashMap<>(h);
 			h.clear();
 		}
 		return temp;
@@ -121,6 +121,7 @@ public class DataManager
 		parent.addProperty("username", client.getLocalPlayer().getName());
 		parent.addProperty("profile", RuneScapeProfileType.getCurrent(client).name());
 		parent.add("data", j);
+		log.info(parent.toString());
 
 		return parent.toString();
 	}
@@ -142,13 +143,13 @@ public class DataManager
 		okHttpClient.newCall(r).enqueue(new Callback()
 		{
 			@Override
-			public void onFailure(Call call, IOException e)
+			public void onFailure(@NonNull Call call, @NonNull IOException e)
 			{
 				log.debug("Error sending changed data", e);
 			}
 
 			@Override
-			public void onResponse(Call call, Response response)
+			public void onResponse(@NonNull Call call, @NonNull Response response)
 			{
 				log.debug("Successfully sent changed data");
 				response.close();
@@ -176,13 +177,13 @@ public class DataManager
 			okHttpClient.newCall(r).enqueue(new Callback()
 			{
 				@Override
-				public void onFailure(Call call, IOException e)
+				public void onFailure(@NonNull Call call, @NonNull IOException e)
 				{
 					log.debug("Error retrieving manifest", e);
 				}
 
 				@Override
-				public void onResponse(Call call, Response response)
+				public void onResponse(@NonNull Call call, @NonNull Response response)
 				{
 					if (response.isSuccessful())
 					{
@@ -191,6 +192,12 @@ public class DataManager
 							// We want to be able to change the varbs and varps we get on the fly. To do so, we tell
 							// the client what to send the server on startup via the manifest.
 
+							if (response.body() == null)
+							{
+								log.error("Manifest request succeeded but returned empty body");
+								response.close();
+								return;
+							}
 							JsonObject j = new Gson().fromJson(response.body().string(), JsonObject.class);
 							try
 							{
@@ -215,8 +222,17 @@ public class DataManager
 					}
 					else
 					{
-						log.error(response.body().toString());
+						log.error("Manifest request returned with status " + response.code());
+						if (response.body() == null)
+						{
+							log.error("Manifest request returned empty body");
+						}
+						else
+						{
+							log.error(response.body().toString());
+						}
 					}
+					response.close();
 				}
 			});
 		}
