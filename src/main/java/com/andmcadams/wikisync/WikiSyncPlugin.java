@@ -58,6 +58,12 @@ public class WikiSyncPlugin extends Plugin
 	{
 		log.info("WikiSync started!");
 		dataManager.getManifest();
+		allowDump = true;
+		clientThread.invoke(() -> {
+			if (client != null && client.getGameState() != null)
+				handleInitialDump(client.getGameState());
+			return true;
+		});
 	}
 
 	@Override
@@ -80,11 +86,12 @@ public class WikiSyncPlugin extends Plugin
 	@Subscribe
 	public void onGameStateChanged(GameStateChanged gameStateChanged)
 	{
-		if (gameStateChanged.getGameState() == GameState.LOGGING_IN)
-		{
-			allowDump = true;
-		}
-		if (gameStateChanged.getGameState() == GameState.LOGGED_IN  && allowDump)
+		handleInitialDump(gameStateChanged.getGameState());
+	}
+
+	private void handleInitialDump(GameState gameState)
+	{
+		if (gameState == GameState.LOGGED_IN  && allowDump)
 		{
 			allowDump = false;
 			loadInitialData();
