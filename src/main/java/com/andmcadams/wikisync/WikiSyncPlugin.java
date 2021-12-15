@@ -53,12 +53,16 @@ public class WikiSyncPlugin extends Plugin
 
 	private static final int VARBITS_ARCHIVE_ID = 14;
 
+	@Setter
+	private static boolean manifestSuccess;
+
 	@Override
 	protected void startUp() throws Exception
 	{
 		log.info("WikiSync started!");
-		dataManager.getManifest();
 		allowDump = true;
+		manifestSuccess = false;
+		dataManager.getManifest();
 		clientThread.invoke(() -> {
 			if (client != null && client.getGameState() != null)
 				handleInitialDump(client.getGameState());

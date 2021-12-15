@@ -203,6 +203,7 @@ public class DataManager
 							{
 								WikiSyncPlugin.setVarbitsToCheck(parseSet(j.getAsJsonArray("varbits")));
 								WikiSyncPlugin.setVarpsToCheck(parseSet(j.getAsJsonArray("varps")));
+								WikiSyncPlugin.setManifestSuccess(true);
 							}
 							catch (NullPointerException e) {
 								// This is probably an issue with the server. "varbits" or "varps" might be missing.
