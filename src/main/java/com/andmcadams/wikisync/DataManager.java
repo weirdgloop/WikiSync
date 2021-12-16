@@ -38,6 +38,7 @@ import javax.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
+import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.RuneScapeProfileType;
 import okhttp3.Call;
 import okhttp3.Callback;
@@ -59,6 +60,9 @@ public class DataManager
 	private Client client;
 
 	@Inject
+	private ClientThread clientThread;
+
+	@Inject
 	private OkHttpClient okHttpClient;
 
 	@Inject
@@ -69,6 +73,7 @@ public class DataManager
 
 	private final HashMap<Integer, Integer> varbData = new HashMap<>();
 	private final HashMap<Integer, Integer> varpData = new HashMap<>();
+	private final HashMap<String, Integer> levelData = new HashMap<>();
 
 	public void storeVarbitChanged(int varbIndex, int varbValue)
 	{
@@ -85,6 +90,15 @@ public class DataManager
 		synchronized (this)
 		{
 			varpData.put(varpIndex, varpValue);
+		}
+	}
+
+	public void storeSkillChanged(String skill, int skillLevel)
+	{
+		log.info("Stored skill " + skill + " with level " + skillLevel);
+		synchronized (this)
+		{
+			levelData.put(skill, skillLevel);
 		}
 	}
 
@@ -112,10 +126,12 @@ public class DataManager
 	{
 		HashMap<Integer, Integer> tempVarbData = clearChanges(varbData);
 		HashMap<Integer, Integer> tempVarpData = clearChanges(varpData);
+		HashMap<String, Integer> tempLevelData = clearChanges(levelData);
 
 		JsonObject j = new JsonObject();
 		j.add("varb", gson.toJsonTree(tempVarbData));
 		j.add("varp", gson.toJsonTree(tempVarpData));
+		j.add("level", gson.toJsonTree(tempLevelData));
 
 		JsonObject parent = new JsonObject();
 		parent.addProperty("username", client.getLocalPlayer().getName());
@@ -204,6 +220,13 @@ public class DataManager
 								WikiSyncPlugin.setVarbitsToCheck(parseSet(j.getAsJsonArray("varbits")));
 								WikiSyncPlugin.setVarpsToCheck(parseSet(j.getAsJsonArray("varps")));
 								WikiSyncPlugin.setManifestSuccess(true);
+								// This will not actually push anything if the player is not logged in.
+								// If the player is logged in, this ensures that we run after grabbing the manifest.
+								clientThread.invoke(() -> {
+									if (client != null && client.getGameState() != null)
+										plugin.handleInitialDump(client.getGameState());
+									return true;
+								});
 							}
 							catch (NullPointerException e) {
 								// This is probably an issue with the server. "varbits" or "varps" might be missing.

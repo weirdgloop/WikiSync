@@ -4,15 +4,20 @@ import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
 import com.google.inject.Provides;
 import java.time.temporal.ChronoUnit;
+import java.util.HashMap;
 import java.util.HashSet;
 import javax.inject.Inject;
+
+import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.IndexDataBase;
+import net.runelite.api.Skill;
 import net.runelite.api.VarbitComposition;
 import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.events.StatChanged;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
@@ -47,6 +52,7 @@ public class WikiSyncPlugin extends Plugin
 
 	private static int[] oldVarps;
 	private Multimap<Integer, Integer> varpToVarbitMapping;
+	private final HashMap<String, Integer> skillLevelCache = new HashMap<>();
 
 	// TODO: Change this number since this is just for testing
 	private static final int SECONDS_BETWEEN_UPLOADS = 5;
@@ -56,24 +62,24 @@ public class WikiSyncPlugin extends Plugin
 	@Setter
 	private static boolean manifestSuccess;
 
+	private static boolean allowDump = true;
+
 	@Override
 	protected void startUp() throws Exception
 	{
 		log.info("WikiSync started!");
 		allowDump = true;
 		manifestSuccess = false;
+		skillLevelCache.clear();
 		dataManager.getManifest();
-		clientThread.invoke(() -> {
-			if (client != null && client.getGameState() != null)
-				handleInitialDump(client.getGameState());
-			return true;
-		});
 	}
 
 	@Override
 	protected void shutDown() throws Exception
 	{
 		log.info("WikiSync stopped!");
+		varbitsToCheck = null;
+		varpsToCheck = null;
 	}
 
 	@Schedule(
@@ -86,14 +92,13 @@ public class WikiSyncPlugin extends Plugin
 		dataManager.submitToAPI();
 	}
 
-	private static boolean allowDump = true;
 	@Subscribe
 	public void onGameStateChanged(GameStateChanged gameStateChanged)
 	{
 		handleInitialDump(gameStateChanged.getGameState());
 	}
 
-	private void handleInitialDump(GameState gameState)
+	public void handleInitialDump(GameState gameState)
 	{
 		if (gameState == GameState.LOGGED_IN  && allowDump)
 		{
@@ -151,6 +156,11 @@ public class WikiSyncPlugin extends Plugin
 		{
 			dataManager.storeVarpChanged(varpIndex, client.getVarpValue(varpIndex));
 		}
+		for(Skill s : Skill.values())
+		{
+			if (s != Skill.OVERALL)
+				dataManager.storeSkillChanged(s.getName(), client.getRealSkillLevel(s));
+		}
 	}
 
 	@Subscribe
@@ -178,6 +188,19 @@ public class WikiSyncPlugin extends Plugin
 				dataManager.storeVarbitChanged(i, newValue);
 		}
 		oldVarps[varpIndexChanged] = client.getVarpValue(varpIndexChanged);
+	}
+
+	@Subscribe
+	public void onStatChanged(StatChanged statChanged)
+	{
+		if (statChanged.getSkill() == null || statChanged.getSkill() == Skill.OVERALL)
+			return;
+	    Integer cachedLevel = skillLevelCache.get(statChanged.getSkill().getName());
+		if (cachedLevel == null || cachedLevel != statChanged.getLevel())
+		{
+			skillLevelCache.put(statChanged.getSkill().getName(), statChanged.getLevel());
+			dataManager.storeSkillChanged(statChanged.getSkill().getName(), statChanged.getLevel());
+		}
 	}
 
 	@Provides
