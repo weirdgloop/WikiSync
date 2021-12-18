@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2019, Weird Gloop <admin@weirdgloop.org>
- * Copyright (c) 2021, Andrew McAdams
+ * Copyright (c) 2021, andmcadams
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,16 +24,7 @@
  */
 package com.andmcadams.wikisync;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonSyntaxException;
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.HashSet;
-import javax.inject.Inject;
-import javax.inject.Singleton;
+import com.google.gson.*;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
@@ -48,14 +38,16 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 
+import javax.inject.Inject;
+import javax.inject.Singleton;
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.HashSet;
+
 @Slf4j
 @Singleton
 public class DataManager
 {
-	private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
-	private static final String MANIFEST_ENDPOINT = "https://sync.runescape.wiki/runelite/manifest";
-	private static final String POST_ENDPOINT = "https://sync.runescape.wiki/runelite/submit";
-
 	@Inject
 	private Client client;
 
@@ -74,6 +66,11 @@ public class DataManager
 	private final HashMap<Integer, Integer> varbData = new HashMap<>();
 	private final HashMap<Integer, Integer> varpData = new HashMap<>();
 	private final HashMap<String, Integer> levelData = new HashMap<>();
+
+	private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
+	private static final String MANIFEST_ENDPOINT = "https://sync.runescape.wiki/runelite/manifest";
+	private static final String POST_ENDPOINT = "https://sync.runescape.wiki/runelite/submit";
+
 
 	public void storeVarbitChanged(int varbIndex, int varbValue)
 	{
@@ -217,9 +214,9 @@ public class DataManager
 							JsonObject j = new Gson().fromJson(response.body().string(), JsonObject.class);
 							try
 							{
-								WikiSyncPlugin.setVarbitsToCheck(parseSet(j.getAsJsonArray("varbits")));
-								WikiSyncPlugin.setVarpsToCheck(parseSet(j.getAsJsonArray("varps")));
-								WikiSyncPlugin.setManifestSuccess(true);
+								plugin.setVarbitsToCheck(parseSet(j.getAsJsonArray("varbits")));
+								plugin.setVarpsToCheck(parseSet(j.getAsJsonArray("varps")));
+								plugin.setManifestSuccess(true);
 								// This will not actually push anything if the player is not logged in.
 								// If the player is logged in, this ensures that we run after grabbing the manifest.
 								clientThread.invoke(() -> {

@@ -1,14 +1,30 @@
+/*
+ * Copyright (c) 2021, andmcadams
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+ * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 package com.andmcadams.wikisync;
 
 import com.google.common.collect.HashMultimap;
-import com.google.common.collect.Multimap;
-import com.google.inject.Provides;
-import java.time.temporal.ChronoUnit;
-import java.util.HashMap;
-import java.util.HashSet;
-import javax.inject.Inject;
-
-import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
@@ -20,11 +36,15 @@ import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.StatChanged;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.client.callback.ClientThread;
-import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.task.Schedule;
+
+import javax.inject.Inject;
+import java.time.temporal.ChronoUnit;
+import java.util.HashMap;
+import java.util.HashSet;
 
 @Slf4j
 @PluginDescriptor(
@@ -39,30 +59,23 @@ public class WikiSyncPlugin extends Plugin
 	private ClientThread clientThread;
 
 	@Inject
-	private WikiSyncConfig config;
-
-	@Inject
 	private DataManager dataManager;
 
 	@Setter
-	private static HashSet<Integer> varbitsToCheck;
+	private HashSet<Integer> varbitsToCheck;
 
 	@Setter
-	private static HashSet<Integer> varpsToCheck;
+	private HashSet<Integer> varpsToCheck;
 
-	private static int[] oldVarps;
-	private Multimap<Integer, Integer> varpToVarbitMapping;
+	@Setter
+	private boolean manifestSuccess;
+
+	private int[] oldVarps;
+	private boolean allowDump = true;
+	private final HashMultimap<Integer, Integer> varpToVarbitMapping = HashMultimap.create();
 	private final HashMap<String, Integer> skillLevelCache = new HashMap<>();
-
-	// TODO: Change this number since this is just for testing
-	private static final int SECONDS_BETWEEN_UPLOADS = 5;
-
-	private static final int VARBITS_ARCHIVE_ID = 14;
-
-	@Setter
-	private static boolean manifestSuccess;
-
-	private static boolean allowDump = true;
+	private final int SECONDS_BETWEEN_UPLOADS = 10;
+	private final int VARBITS_ARCHIVE_ID = 14;
 
 	@Override
 	protected void startUp() throws Exception
@@ -115,7 +128,7 @@ public class WikiSyncPlugin extends Plugin
 	private void setupVarpTracking()
 	{
 		// Init stuff to keep track of varb changes
-		varpToVarbitMapping = HashMultimap.create();
+		varpToVarbitMapping.clear();
 
 		if (oldVarps == null)
 		{
@@ -174,7 +187,6 @@ public class WikiSyncPlugin extends Plugin
 		int varpIndexChanged = varbitChanged.getIndex();
 		if (varpsToCheck.contains(varpIndexChanged))
 		{
-			// Do some stuff here
 			dataManager.storeVarpChanged(varpIndexChanged, client.getVarpValue(varpIndexChanged));
 		}
 		for (Integer i : varpToVarbitMapping.get(varpIndexChanged))
@@ -201,11 +213,5 @@ public class WikiSyncPlugin extends Plugin
 			skillLevelCache.put(statChanged.getSkill().getName(), statChanged.getLevel());
 			dataManager.storeSkillChanged(statChanged.getSkill().getName(), statChanged.getLevel());
 		}
-	}
-
-	@Provides
-	WikiSyncConfig provideConfig(ConfigManager configManager)
-	{
-		return configManager.getConfig(WikiSyncConfig.class);
 	}
 }
