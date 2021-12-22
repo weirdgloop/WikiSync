@@ -120,7 +120,7 @@ public class DataManager
 
 	private boolean hasDataToPush()
 	{
-		return !(varbData.isEmpty() && varpData.isEmpty());
+		return !(varbData.isEmpty() && varpData.isEmpty() && levelData.isEmpty());
 	}
 
 	private String convertToJson()
