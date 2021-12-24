@@ -25,6 +25,7 @@
 package com.andmcadams.wikisync;
 
 import com.google.common.collect.HashMultimap;
+import com.google.inject.Provides;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
@@ -36,6 +37,7 @@ import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.StatChanged;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.client.callback.ClientThread;
+import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
@@ -59,7 +61,13 @@ public class WikiSyncPlugin extends Plugin
 	private ClientThread clientThread;
 
 	@Inject
+	private ConfigManager configManager;
+
+	@Inject
 	private DataManager dataManager;
+
+	@Inject
+	private WikiSyncConfig config;
 
 	@Setter
 	private HashSet<Integer> varbitsToCheck;
@@ -77,10 +85,21 @@ public class WikiSyncPlugin extends Plugin
 	private final int SECONDS_BETWEEN_UPLOADS = 10;
 	private final int VARBITS_ARCHIVE_ID = 14;
 
+	public static final String CONFIG_GROUP_KEY = "WikiSync";
+	// THIS VERSION SHOULD BE INCREMENTED EVERY RELEASE WHERE WE ADD A NEW TOGGLE
+	public static final int VERSION = 1;
+
+	@Provides
+	WikiSyncConfig getConfig(ConfigManager configManager)
+	{
+		return configManager.getConfig(WikiSyncConfig.class);
+	}
+
 	@Override
 	protected void startUp() throws Exception
 	{
 		log.info("WikiSync started!");
+		setTogglesBasedOnVersion();
 		allowDump = true;
 		manifestSuccess = false;
 		skillLevelCache.clear();
@@ -213,5 +232,26 @@ public class WikiSyncPlugin extends Plugin
 			skillLevelCache.put(statChanged.getSkill().getName(), statChanged.getLevel());
 			dataManager.storeSkillChanged(statChanged.getSkill().getName(), statChanged.getLevel());
 		}
+	}
+
+	private void setTogglesBasedOnVersion()
+	{
+		// Conditionally turn off certain features by default
+		Integer version = configManager.getConfiguration(CONFIG_GROUP_KEY, WikiSyncConfig.WIKISYNC_VERSION_KEYNAME, Integer.class);
+		if (version == null)
+			return;
+		int maxVersion = version;
+		/* EXAMPLE TOGGLE SETTING CLAUSE */
+		/* if (version < 2)
+		{
+			// Location tracking was added in deploy 2
+			configManager.setConfiguration(CONFIG_GROUP_KEY, WikiSyncConfig.WIKISYNC_TOGGLE_LOCATION_KEYNAME, false);
+			maxVersion = 2;
+		}
+		*/
+
+		// This is done here and not in each block because we don't want to rely on the order of the if clauses being correct.
+		configManager.setConfiguration(CONFIG_GROUP_KEY, WikiSyncConfig.WIKISYNC_VERSION_KEYNAME, maxVersion);
+		log.debug("WikiSync version set to deployment number " + version);
 	}
 }
