@@ -78,7 +78,7 @@ public class DataManager
 
 	public void storeVarbitChanged(int varbIndex, int varbValue)
 	{
-		log.info("Stored varb with index " + varbIndex + " and value " + varbValue);
+		log.debug("Stored varb with index " + varbIndex + " and value " + varbValue);
 		synchronized (this)
 		{
 			varbData.put(varbIndex, varbValue);
@@ -87,7 +87,7 @@ public class DataManager
 
 	public void storeVarpChanged(int varpIndex, int varpValue)
 	{
-		log.info("Stored varp with index " + varpIndex + " and value " + varpValue);
+		log.debug("Stored varp with index " + varpIndex + " and value " + varpValue);
 		synchronized (this)
 		{
 			varpData.put(varpIndex, varpValue);
@@ -96,7 +96,7 @@ public class DataManager
 
 	public void storeSkillChanged(String skill, int skillLevel)
 	{
-		log.info("Stored skill " + skill + " with level " + skillLevel);
+		log.debug("Stored skill " + skill + " with level " + skillLevel);
 		synchronized (this)
 		{
 			levelData.put(skill, skillLevel);
@@ -138,7 +138,6 @@ public class DataManager
 		parent.addProperty("username", client.getLocalPlayer().getName());
 		parent.addProperty("profile", RuneScapeProfileType.getCurrent(client).name());
 		parent.add("data", j);
-		log.info(parent.toString());
 
 		return parent.toString();
 	}
@@ -151,7 +150,7 @@ public class DataManager
 		if (RuneScapeProfileType.getCurrent(client) == RuneScapeProfileType.BETA)
 			return;
 
-		log.info("Submitting changed data to endpoint");
+		log.debug("Submitting changed data to endpoint...");
 		Request r = new Request.Builder()
 			.url(POST_ENDPOINT)
 			.post(RequestBody.create(JSON, convertToJson()))
@@ -162,7 +161,7 @@ public class DataManager
 			@Override
 			public void onFailure(@NonNull Call call, @NonNull IOException e)
 			{
-				log.debug("Error sending changed data", e);
+				log.error("Error sending changed data", e);
 			}
 
 			@Override
@@ -196,7 +195,7 @@ public class DataManager
 				@Override
 				public void onFailure(@NonNull Call call, @NonNull IOException e)
 				{
-					log.debug("Error retrieving manifest", e);
+					log.error("Error retrieving manifest", e);
 				}
 
 				@Override
