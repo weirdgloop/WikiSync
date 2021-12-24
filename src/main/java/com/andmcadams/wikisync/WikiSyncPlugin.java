@@ -245,7 +245,7 @@ public class WikiSyncPlugin extends Plugin
 		/* if (version < 2)
 		{
 			// Location tracking was added in deploy 2
-			configManager.setConfiguration(CONFIG_GROUP_KEY, WikiSyncConfig.WIKISYNC_TOGGLE_LOCATION_KEYNAME, false);
+			configManager.setConfiguration(CONFIG_GROUP_KEY, WikiSyncConfig.WIKISYNC_TOGGLE_KEYNAME, false);
 			maxVersion = 2;
 		}
 		*/
