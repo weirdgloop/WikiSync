@@ -28,6 +28,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
 import com.google.gson.JsonSyntaxException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -76,13 +77,21 @@ public class DataManager
 	private static final String CHECK_MANIFEST_ENDPOINT = "https://sync.runescape.wiki/runelite/check_manifest";
 	private static final String POST_ENDPOINT = "https://sync.runescape.wiki/runelite/submit";
 
-
 	public void storeVarbitChanged(int varbIndex, int varbValue)
 	{
 		log.debug("Stored varb with index " + varbIndex + " and value " + varbValue);
 		synchronized (this)
 		{
 			varbData.put(varbIndex, varbValue);
+		}
+	}
+
+	public void restoreVarbitChanged(int varbIndex, int varbValue)
+	{
+		synchronized (this)
+		{
+			if (!varbData.containsKey(varbIndex))
+				storeVarbitChanged(varbIndex, varbValue);
 		}
 	}
 
@@ -95,12 +104,30 @@ public class DataManager
 		}
 	}
 
+	public void restoreVarpChanged(int varpIndex, int varpValue)
+	{
+		synchronized (this)
+		{
+			if (!varpData.containsKey(varpIndex))
+				storeVarpChanged(varpIndex, varpValue);
+		}
+	}
+
 	public void storeSkillChanged(String skill, int skillLevel)
 	{
 		log.debug("Stored skill " + skill + " with level " + skillLevel);
 		synchronized (this)
 		{
 			levelData.put(skill, skillLevel);
+		}
+	}
+
+	public void restoreSkillChanged(String skill, int skillLevel)
+	{
+		synchronized (this)
+		{
+			if (!levelData.containsKey(skill))
+				storeSkillChanged(skill, skillLevel);
 		}
 	}
 
@@ -124,7 +151,7 @@ public class DataManager
 		return !(varbData.isEmpty() && varpData.isEmpty() && levelData.isEmpty());
 	}
 
-	private String convertToJson()
+	private JsonObject convertToJson()
 	{
 		HashMap<Integer, Integer> tempVarbData = clearChanges(varbData);
 		HashMap<Integer, Integer> tempVarpData = clearChanges(varpData);
@@ -140,10 +167,10 @@ public class DataManager
 		parent.addProperty("profile", RuneScapeProfileType.getCurrent(client).name());
 		parent.add("data", j);
 
-		return parent.toString();
+		return parent;
 	}
 
-	protected void submitToAPI()
+	protected void submitToAPI() throws IOException
 	{
 		if (!hasDataToPush() || client.getLocalPlayer() == null || client.getLocalPlayer().getName() == null)
 			return;
@@ -151,27 +178,40 @@ public class DataManager
 		if (RuneScapeProfileType.getCurrent(client) == RuneScapeProfileType.BETA)
 			return;
 
+		JsonObject jObj = convertToJson();
 		log.debug("Submitting changed data to endpoint...");
 		Request r = new Request.Builder()
 			.url(POST_ENDPOINT)
-			.post(RequestBody.create(JSON, convertToJson()))
+			.post(RequestBody.create(JSON, jObj.toString()))
 			.build();
 
-		okHttpClient.newCall(r).enqueue(new Callback()
+		try (Response response = okHttpClient.newCall(r).execute())
 		{
-			@Override
-			public void onFailure(@NonNull Call call, @NonNull IOException e)
+			if (!response.isSuccessful())
 			{
-				log.error("Error sending changed data", e);
+				log.error("Failed to submit data, attempting to reload dropped data...");
+				JsonObject dataObj = jObj.getAsJsonObject("data");
+				JsonObject varbObj = dataObj.getAsJsonObject("varb");
+				JsonObject varpObj = dataObj.getAsJsonObject("varp");
+				JsonObject levelObj = dataObj.getAsJsonObject("level");
+				for (String k : varbObj.keySet())
+				{
+					this.restoreVarbitChanged(Integer.parseInt(k), varbObj.get(k).getAsInt());
+				}
+				for (String k : varpObj.keySet())
+				{
+					this.restoreVarpChanged(Integer.parseInt(k), varpObj.get(k).getAsInt());
+				}
+				for (String k : levelObj.keySet())
+				{
+					this.restoreSkillChanged(k, levelObj.get(k).getAsInt());
+				}
 			}
-
-			@Override
-			public void onResponse(@NonNull Call call, @NonNull Response response)
-			{
-				log.debug("Successfully sent changed data");
-				response.close();
-			}
-		});
+		}
+		catch (JsonParseException ex)
+		{
+			throw new IOException(ex);
+		}
 	}
 
 	private HashSet<Integer> parseSet(JsonArray j)

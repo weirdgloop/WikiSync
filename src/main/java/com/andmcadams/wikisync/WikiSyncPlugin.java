@@ -26,6 +26,7 @@ package com.andmcadams.wikisync;
 
 import com.google.common.collect.HashMultimap;
 import com.google.inject.Provides;
+import java.io.IOException;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -82,7 +83,6 @@ public class WikiSyncPlugin extends Plugin
 	private String manifestVersion = "";
 
 	private int[] oldVarps;
-	private boolean allowDump = true;
 	private final HashMultimap<Integer, Integer> varpToVarbitMapping = HashMultimap.create();
 	private final HashMap<String, Integer> skillLevelCache = new HashMap<>();
 	private final int SECONDS_BETWEEN_UPLOADS = 10;
@@ -105,7 +105,6 @@ public class WikiSyncPlugin extends Plugin
 	{
 		log.info("WikiSync started!");
 		setTogglesBasedOnVersion();
-		allowDump = true;
 		manifestSuccess = false;
 		skillLevelCache.clear();
 		dataManager.getManifest();
@@ -136,7 +135,14 @@ public class WikiSyncPlugin extends Plugin
 	)
 	public void submitToAPI()
 	{
-		dataManager.submitToAPI();
+		try
+		{
+			dataManager.submitToAPI();
+		}
+		catch (IOException e)
+		{
+			log.error(e.getLocalizedMessage());
+		}
 	}
 
 	@Subscribe
@@ -147,9 +153,8 @@ public class WikiSyncPlugin extends Plugin
 
 	public void handleInitialDump(GameState gameState)
 	{
-		if (gameState == GameState.LOGGED_IN  && allowDump)
+		if (gameState == GameState.LOGGING_IN || gameState == GameState.HOPPING)
 		{
-			allowDump = false;
 			loadInitialData();
 		}
 	}
