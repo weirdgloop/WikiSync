@@ -9,8 +9,9 @@ class TestResource:
         """Handles GET requests"""
         # 4101 is the first prayer, toggle it to send data to the server
         resp.media = {
-            'varbits': [0, 100, 9657, 4101],
-            'varps': [1, 3, 5, 6]
+            'varbits': [0, 100, 9657, 4101, 5000, 10000, 4104],
+            'varps': [1, 3, 5, 6, 7, 10],
+            'version': 4
         }
         resp.status = falcon.HTTP_200
         return resp
@@ -19,13 +20,21 @@ class TestResource:
         print(req.media)
         resp.status = falcon.HTTP_200
 
+    def on_get_check(self, req, resp):
+        resp.media = {
+            'version': 4
+        }
+        resp.status = falcon.HTTP_200
+        return resp
+
 
 def create_app():
     app = falcon.App()
     # Resources are represented by long-lived class instances
     t = TestResource()
     app.add_route('/manifest', t)
-    app.add_route('/change', t)
+    app.add_route('/check_manifest', t, suffix='check')
+    app.add_route('/submit', t)
     return app
 
 
