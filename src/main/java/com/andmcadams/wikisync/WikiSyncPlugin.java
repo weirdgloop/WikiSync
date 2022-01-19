@@ -86,7 +86,7 @@ public class WikiSyncPlugin extends Plugin
 	private final HashMultimap<Integer, Integer> varpToVarbitMapping = HashMultimap.create();
 	private final HashMap<String, Integer> skillLevelCache = new HashMap<>();
 	private final int SECONDS_BETWEEN_UPLOADS = 10;
-	private final int SECONDS_BETWEEN_MANIFEST_CHECKS = 20; // 20 minutes
+	private final int SECONDS_BETWEEN_MANIFEST_CHECKS = 60*20; // 20 minutes
 	private final int VARBITS_ARCHIVE_ID = 14;
 
 	public static final String CONFIG_GROUP_KEY = "WikiSync";
