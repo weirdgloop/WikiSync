@@ -148,12 +148,7 @@ public class WikiSyncPlugin extends Plugin
 	@Subscribe
 	public void onGameStateChanged(GameStateChanged gameStateChanged)
 	{
-		handleInitialDump(gameStateChanged.getGameState());
-	}
-
-	public void handleInitialDump(GameState gameState)
-	{
-		if (gameState == GameState.LOGGING_IN || gameState == GameState.HOPPING)
+		if (gameStateChanged.getGameState() == GameState.LOGGING_IN)
 		{
 			loadInitialData();
 		}
@@ -197,24 +192,32 @@ public class WikiSyncPlugin extends Plugin
 		});
 	}
 
-	private void loadInitialData()
+	public void loadInitialData()
 	{
-		synchronized(this)
+		if (client == null)
+			return;
+		GameState g = client.getGameState();
+		if (g == GameState.LOGGING_IN || g == GameState.LOGGED_IN || g == GameState.LOADING || g == GameState.HOPPING)
 		{
-			for (int varbIndex : varbitsToCheck)
+			synchronized (this)
 			{
-				dataManager.storeVarbitChanged(varbIndex, client.getVarbitValue(varbIndex));
-			}
+				for (int varbIndex : varbitsToCheck)
+				{
+					dataManager.storeVarbitChanged(varbIndex, client.getVarbitValue(varbIndex));
+				}
 
-			for (int varpIndex : varpsToCheck)
-			{
-				dataManager.storeVarpChanged(varpIndex, client.getVarpValue(varpIndex));
+				for (int varpIndex : varpsToCheck)
+				{
+					dataManager.storeVarpChanged(varpIndex, client.getVarpValue(varpIndex));
+				}
 			}
-		}
-		for(Skill s : Skill.values())
-		{
-			if (s != Skill.OVERALL)
-				dataManager.storeSkillChanged(s.getName(), client.getRealSkillLevel(s));
+			for (Skill s : Skill.values())
+			{
+				if (s != Skill.OVERALL)
+				{
+					dataManager.storeSkillChanged(s.getName(), client.getRealSkillLevel(s));
+				}
+			}
 		}
 	}
 
@@ -222,9 +225,13 @@ public class WikiSyncPlugin extends Plugin
 	public void onVarbitChanged(VarbitChanged varbitChanged)
 	{
 		if (client == null || varpsToCheck == null || varbitsToCheck == null)
+		{
 			return;
+		}
 		if (oldVarps == null)
+		{
 			setupVarpTracking();
+		}
 
 		int varpIndexChanged = varbitChanged.getIndex();
 		synchronized (this)
@@ -240,13 +247,17 @@ public class WikiSyncPlugin extends Plugin
 			synchronized (this)
 			{
 				if (!varbitsToCheck.contains(i))
+				{
 					continue;
+				}
 			}
 			// For each varbit index, see if it changed.
 			int oldValue = client.getVarbitValue(oldVarps, i);
 			int newValue = client.getVarbitValue(i);
 			if (oldValue != newValue)
+			{
 				dataManager.storeVarbitChanged(i, newValue);
+			}
 		}
 		oldVarps[varpIndexChanged] = client.getVarpValue(varpIndexChanged);
 	}
@@ -255,8 +266,10 @@ public class WikiSyncPlugin extends Plugin
 	public void onStatChanged(StatChanged statChanged)
 	{
 		if (statChanged.getSkill() == null || statChanged.getSkill() == Skill.OVERALL)
+		{
 			return;
-	    Integer cachedLevel = skillLevelCache.get(statChanged.getSkill().getName());
+		}
+		Integer cachedLevel = skillLevelCache.get(statChanged.getSkill().getName());
 		if (cachedLevel == null || cachedLevel != statChanged.getLevel())
 		{
 			skillLevelCache.put(statChanged.getSkill().getName(), statChanged.getLevel());
@@ -269,7 +282,9 @@ public class WikiSyncPlugin extends Plugin
 		// Conditionally turn off certain features by default
 		Integer version = configManager.getConfiguration(CONFIG_GROUP_KEY, WikiSyncConfig.WIKISYNC_VERSION_KEYNAME, Integer.class);
 		if (version == null)
+		{
 			return;
+		}
 		int maxVersion = version;
 		/* EXAMPLE TOGGLE SETTING CLAUSE */
 		/* if (version < 2)
@@ -287,7 +302,7 @@ public class WikiSyncPlugin extends Plugin
 
 	public void setVarbitsToCheck(HashSet<Integer> varbitsToCheck)
 	{
-		synchronized(this)
+		synchronized (this)
 		{
 			this.varbitsToCheck = varbitsToCheck;
 		}

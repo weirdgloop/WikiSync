@@ -74,8 +74,10 @@ public class DataManager
 
 	private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
 	private static final String MANIFEST_ENDPOINT = "https://sync.runescape.wiki/runelite/manifest";
-	private static final String CHECK_MANIFEST_ENDPOINT = "https://sync.runescape.wiki/runelite/check_manifest";
+	private static final String VERSION_ENDPOINT = "https://sync.runescape.wiki/runelite/version";
 	private static final String POST_ENDPOINT = "https://sync.runescape.wiki/runelite/submit";
+
+	private RuneScapeProfileType lastProfileType = null;
 
 	public void storeVarbitChanged(int varbIndex, int varbValue)
 	{
@@ -131,6 +133,27 @@ public class DataManager
 		}
 	}
 
+	private boolean clearAllIfProfileChanged()
+	{
+		RuneScapeProfileType r = RuneScapeProfileType.getCurrent(client);
+		if (lastProfileType == null)
+			lastProfileType = r;
+		if (!lastProfileType.equals(r))
+		{
+			log.debug("Clearing all data...");
+			lastProfileType = r;
+			synchronized (this)
+			{
+				varbData.clear();
+				varpData.clear();
+				levelData.clear();
+			}
+			return true;
+		}
+		return false;
+
+	}
+
 	private <K, V> HashMap<K, V> clearChanges(HashMap<K, V> h)
 	{
 		HashMap<K, V> temp;
@@ -172,6 +195,16 @@ public class DataManager
 
 	protected void submitToAPI() throws IOException
 	{
+		// If we have changed profiles, clear all our data and start fresh.
+		if (clearAllIfProfileChanged())
+		{
+			clientThread.invoke(() -> {
+				plugin.loadInitialData();
+				return true;
+			});
+			return;
+		}
+		// If we do not have data or the player is gone, do not push anything.
 		if (!hasDataToPush() || client.getLocalPlayer() == null || client.getLocalPlayer().getName() == null)
 			return;
 
@@ -190,6 +223,7 @@ public class DataManager
 			if (!response.isSuccessful())
 			{
 				log.error("Failed to submit data, attempting to reload dropped data...");
+				// If we fail to submit data, try to recover as much as possible without squashing newer data.
 				JsonObject dataObj = jObj.getAsJsonObject("data");
 				JsonObject varbObj = dataObj.getAsJsonObject("varb");
 				JsonObject varpObj = dataObj.getAsJsonObject("varp");
@@ -263,11 +297,9 @@ public class DataManager
 								plugin.setVarpsToCheck(parseSet(j.getAsJsonArray("varps")));
 								plugin.setManifestVersion(j.getAsJsonPrimitive("version").getAsString());
 								plugin.setManifestSuccess(true);
-								// This will not actually push anything if the player is not logged in.
-								// If the player is logged in, this ensures that we run after grabbing the manifest.
+								// Load initial data dump if the player is logged in, loading, or hopping.
 								clientThread.invoke(() -> {
-									if (client != null && client.getGameState() != null)
-										plugin.handleInitialDump(client.getGameState());
+									plugin.loadInitialData();
 									return true;
 								});
 							}
@@ -314,7 +346,7 @@ public class DataManager
 		try
 		{
 			Request r = new Request.Builder()
-				.url(CHECK_MANIFEST_ENDPOINT)
+				.url(VERSION_ENDPOINT)
 				.build();
 			okHttpClient.newCall(r).enqueue(new Callback()
 			{
