@@ -26,6 +26,7 @@ package com.andmcadams.wikisync;
 
 import com.google.common.collect.HashMultimap;
 import com.google.inject.Provides;
+import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
@@ -69,25 +70,29 @@ public class WikiSyncPlugin extends Plugin
 	@Inject
 	private WikiSyncConfig config;
 
-	@Setter
 	private HashSet<Integer> varbitsToCheck;
 
-	@Setter
 	private HashSet<Integer> varpsToCheck;
 
 	@Setter
 	private boolean manifestSuccess;
+
+	@Getter
+	@Setter
+	private String manifestVersion = "";
 
 	private int[] oldVarps;
 	private boolean allowDump = true;
 	private final HashMultimap<Integer, Integer> varpToVarbitMapping = HashMultimap.create();
 	private final HashMap<String, Integer> skillLevelCache = new HashMap<>();
 	private final int SECONDS_BETWEEN_UPLOADS = 10;
+	private final int SECONDS_BETWEEN_MANIFEST_CHECKS = 20; // 20 minutes
 	private final int VARBITS_ARCHIVE_ID = 14;
 
 	public static final String CONFIG_GROUP_KEY = "WikiSync";
 	// THIS VERSION SHOULD BE INCREMENTED EVERY RELEASE WHERE WE ADD A NEW TOGGLE
 	public static final int VERSION = 1;
+
 
 	@Provides
 	WikiSyncConfig getConfig(ConfigManager configManager)
@@ -112,6 +117,16 @@ public class WikiSyncPlugin extends Plugin
 		log.info("WikiSync stopped!");
 		varbitsToCheck = null;
 		varpsToCheck = null;
+	}
+
+	@Schedule(
+		period = SECONDS_BETWEEN_MANIFEST_CHECKS,
+		unit = ChronoUnit.SECONDS,
+		asynchronous = true
+	)
+	public void checkManifest()
+	{
+		dataManager.checkManifest();
 	}
 
 	@Schedule(
@@ -179,14 +194,17 @@ public class WikiSyncPlugin extends Plugin
 
 	private void loadInitialData()
 	{
-		for(int varbIndex : varbitsToCheck)
+		synchronized(this)
 		{
-			dataManager.storeVarbitChanged(varbIndex, client.getVarbitValue(varbIndex));
-		}
+			for (int varbIndex : varbitsToCheck)
+			{
+				dataManager.storeVarbitChanged(varbIndex, client.getVarbitValue(varbIndex));
+			}
 
-		for(int varpIndex : varpsToCheck)
-		{
-			dataManager.storeVarpChanged(varpIndex, client.getVarpValue(varpIndex));
+			for (int varpIndex : varpsToCheck)
+			{
+				dataManager.storeVarpChanged(varpIndex, client.getVarpValue(varpIndex));
+			}
 		}
 		for(Skill s : Skill.values())
 		{
@@ -204,14 +222,21 @@ public class WikiSyncPlugin extends Plugin
 			setupVarpTracking();
 
 		int varpIndexChanged = varbitChanged.getIndex();
-		if (varpsToCheck.contains(varpIndexChanged))
+		synchronized (this)
 		{
-			dataManager.storeVarpChanged(varpIndexChanged, client.getVarpValue(varpIndexChanged));
+			if (varpsToCheck.contains(varpIndexChanged))
+			{
+				dataManager.storeVarpChanged(varpIndexChanged, client.getVarpValue(varpIndexChanged));
+			}
 		}
+
 		for (Integer i : varpToVarbitMapping.get(varpIndexChanged))
 		{
-			if (!varbitsToCheck.contains(i))
-				continue;
+			synchronized (this)
+			{
+				if (!varbitsToCheck.contains(i))
+					continue;
+			}
 			// For each varbit index, see if it changed.
 			int oldValue = client.getVarbitValue(oldVarps, i);
 			int newValue = client.getVarbitValue(i);
@@ -254,4 +279,21 @@ public class WikiSyncPlugin extends Plugin
 		configManager.setConfiguration(CONFIG_GROUP_KEY, WikiSyncConfig.WIKISYNC_VERSION_KEYNAME, maxVersion);
 		log.debug("WikiSync version set to deployment number " + version);
 	}
+
+	public void setVarbitsToCheck(HashSet<Integer> varbitsToCheck)
+	{
+		synchronized(this)
+		{
+			this.varbitsToCheck = varbitsToCheck;
+		}
+	}
+
+	public void setVarpsToCheck(HashSet<Integer> varpsToCheck)
+	{
+		synchronized (this)
+		{
+			this.varpsToCheck = varpsToCheck;
+		}
+	}
+
 }

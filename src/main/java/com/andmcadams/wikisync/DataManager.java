@@ -73,6 +73,7 @@ public class DataManager
 
 	private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
 	private static final String MANIFEST_ENDPOINT = "https://sync.runescape.wiki/runelite/manifest";
+	private static final String CHECK_MANIFEST_ENDPOINT = "https://sync.runescape.wiki/runelite/check_manifest";
 	private static final String POST_ENDPOINT = "https://sync.runescape.wiki/runelite/submit";
 
 
@@ -214,11 +215,13 @@ public class DataManager
 								response.close();
 								return;
 							}
-							JsonObject j = new Gson().fromJson(response.body().string(), JsonObject.class);
+							String bodyString = response.body().string();
+							JsonObject j = new Gson().fromJson(bodyString, JsonObject.class);
 							try
 							{
 								plugin.setVarbitsToCheck(parseSet(j.getAsJsonArray("varbits")));
 								plugin.setVarpsToCheck(parseSet(j.getAsJsonArray("varps")));
+								plugin.setManifestVersion(j.getAsJsonPrimitive("version").getAsString());
 								plugin.setManifestSuccess(true);
 								// This will not actually push anything if the player is not logged in.
 								// If the player is logged in, this ensures that we run after grabbing the manifest.
@@ -250,6 +253,82 @@ public class DataManager
 						if (response.body() == null)
 						{
 							log.error("Manifest request returned empty body");
+						}
+						else
+						{
+							log.error(response.body().toString());
+						}
+					}
+					response.close();
+				}
+			});
+		}
+		catch (IllegalArgumentException e)
+		{
+			log.error("Bad URL given: " + e.getLocalizedMessage());
+		}
+	}
+
+	protected void checkManifest()
+	{
+		try
+		{
+			Request r = new Request.Builder()
+				.url(CHECK_MANIFEST_ENDPOINT)
+				.build();
+			okHttpClient.newCall(r).enqueue(new Callback()
+			{
+				@Override
+				public void onFailure(@NonNull Call call, @NonNull IOException e)
+				{
+					log.error("Error checking manifest version", e);
+				}
+
+				@Override
+				public void onResponse(@NonNull Call call, @NonNull Response response)
+				{
+					if (response.isSuccessful())
+					{
+						try
+						{
+							if (response.body() == null)
+							{
+								log.error("Manifest check request succeeded but returned empty body");
+								response.close();
+								return;
+							}
+							String bodyString = response.body().string();
+							JsonObject j = new Gson().fromJson(bodyString, JsonObject.class);
+							try
+							{
+								String manifestVersion = j.getAsJsonPrimitive("version").getAsString();
+								if (!plugin.getManifestVersion().equals(manifestVersion))
+								{
+									getManifest();
+								}
+							}
+							catch (NullPointerException e) {
+								// This is probably an issue with the server. "version" might be missing.
+								log.error("Manifest check possibly missing version entry");
+								log.error(e.getLocalizedMessage());
+							}
+							catch (ClassCastException e) {
+								// This is probably an issue with the server. "version" might be not be a string.
+								log.error("Manifest check from call might have version as not a String");
+								log.error(e.getLocalizedMessage());
+							}
+						}
+						catch (IOException | JsonSyntaxException e)
+						{
+							log.error(e.getLocalizedMessage());
+						}
+					}
+					else
+					{
+						log.error("Manifest check request returned with status " + response.code());
+						if (response.body() == null)
+						{
+							log.error("Manifest check request returned empty body");
 						}
 						else
 						{
