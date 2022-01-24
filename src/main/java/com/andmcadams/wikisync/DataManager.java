@@ -118,6 +118,16 @@ public class DataManager
 		return temp;
 	}
 
+	public void clearData()
+	{
+		synchronized (this)
+		{
+			varbData.clear();
+			varpData.clear();
+			levelData.clear();
+		}
+	}
+
 	private boolean hasDataToPush()
 	{
 		return !(varbData.isEmpty() && varpData.isEmpty() && levelData.isEmpty());
@@ -125,20 +135,25 @@ public class DataManager
 
 	private String convertToJson()
 	{
-		HashMap<Integer, Integer> tempVarbData = clearChanges(varbData);
-		HashMap<Integer, Integer> tempVarpData = clearChanges(varpData);
-		HashMap<String, Integer> tempLevelData = clearChanges(levelData);
-
 		JsonObject j = new JsonObject();
-		j.add("varb", gson.toJsonTree(tempVarbData));
-		j.add("varp", gson.toJsonTree(tempVarpData));
-		j.add("level", gson.toJsonTree(tempLevelData));
-
 		JsonObject parent = new JsonObject();
-		parent.addProperty("username", client.getLocalPlayer().getName());
-		parent.addProperty("profile", RuneScapeProfileType.getCurrent(client).name());
-		parent.add("data", j);
+		// We need to synchronize this to handle the case where the RuneScapeProfileType changes
+		synchronized (this)
+		{
+			RuneScapeProfileType r = RuneScapeProfileType.getCurrent(client);
+			HashMap<Integer, Integer> tempVarbData = clearChanges(varbData);
+			HashMap<Integer, Integer> tempVarpData = clearChanges(varpData);
+			HashMap<String, Integer> tempLevelData = clearChanges(levelData);
 
+			j.add("varb", gson.toJsonTree(tempVarbData));
+			j.add("varp", gson.toJsonTree(tempVarpData));
+			j.add("level", gson.toJsonTree(tempLevelData));
+
+			parent.addProperty("username", client.getLocalPlayer().getName());
+			parent.addProperty("profile", r.name());
+			parent.add("data", j);
+		}
+		log.info(parent.toString());
 		return parent.toString();
 	}
 
@@ -220,13 +235,6 @@ public class DataManager
 								plugin.setVarbitsToCheck(parseSet(j.getAsJsonArray("varbits")));
 								plugin.setVarpsToCheck(parseSet(j.getAsJsonArray("varps")));
 								plugin.setManifestSuccess(true);
-								// This will not actually push anything if the player is not logged in.
-								// If the player is logged in, this ensures that we run after grabbing the manifest.
-								clientThread.invoke(() -> {
-									if (client != null && client.getGameState() != null)
-										plugin.handleInitialDump(client.getGameState());
-									return true;
-								});
 							}
 							catch (NullPointerException e) {
 								// This is probably an issue with the server. "varbits" or "varps" might be missing.

@@ -34,10 +34,12 @@ import net.runelite.api.IndexDataBase;
 import net.runelite.api.Skill;
 import net.runelite.api.VarbitComposition;
 import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.events.GameTick;
 import net.runelite.api.events.StatChanged;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
+import net.runelite.client.config.RuneScapeProfileType;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
@@ -80,6 +82,7 @@ public class WikiSyncPlugin extends Plugin
 
 	private int[] oldVarps;
 	private boolean allowDump = true;
+	private RuneScapeProfileType lastProfile;
 	private final HashMultimap<Integer, Integer> varpToVarbitMapping = HashMultimap.create();
 	private final HashMap<String, Integer> skillLevelCache = new HashMap<>();
 	private final int SECONDS_BETWEEN_UPLOADS = 10;
@@ -102,6 +105,7 @@ public class WikiSyncPlugin extends Plugin
 		setTogglesBasedOnVersion();
 		allowDump = true;
 		manifestSuccess = false;
+		lastProfile = null;
 		skillLevelCache.clear();
 		dataManager.getManifest();
 	}
@@ -112,6 +116,7 @@ public class WikiSyncPlugin extends Plugin
 		log.info("WikiSync stopped!");
 		varbitsToCheck = null;
 		varpsToCheck = null;
+		dataManager.clearData();
 	}
 
 	@Schedule(
@@ -125,16 +130,21 @@ public class WikiSyncPlugin extends Plugin
 	}
 
 	@Subscribe
-	public void onGameStateChanged(GameStateChanged gameStateChanged)
+	public void onGameTick(GameTick gameTick)
 	{
-		handleInitialDump(gameStateChanged.getGameState());
+		// Call a helper function since it needs to be called from DataManager as well
+		checkProfileChange();
 	}
 
-	public void handleInitialDump(GameState gameState)
+	public void checkProfileChange()
 	{
-		if (gameState == GameState.LOGGED_IN  && allowDump)
+		RuneScapeProfileType r = RuneScapeProfileType.getCurrent(client);
+		if (r != lastProfile && client != null && varbitsToCheck != null && varpsToCheck != null)
 		{
-			allowDump = false;
+			// profile change, we should clear the datamanager and do a new initial dump
+			log.error("Profile changed!!");
+			lastProfile = r;
+			dataManager.clearData();
 			loadInitialData();
 		}
 	}
