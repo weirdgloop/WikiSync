@@ -126,7 +126,8 @@ public class WikiSyncPlugin extends Plugin
 	)
 	public void submitToAPI()
 	{
-		dataManager.submitToAPI();
+		if (client != null && client.getGameState() != GameState.HOPPING)
+			dataManager.submitToAPI();
 	}
 
 	@Subscribe
