@@ -26,8 +26,6 @@ package com.andmcadams.wikisync;
 
 import com.google.common.collect.HashMultimap;
 import com.google.inject.Provides;
-import java.io.IOException;
-import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
@@ -71,28 +69,25 @@ public class WikiSyncPlugin extends Plugin
 	@Inject
 	private WikiSyncConfig config;
 
+	@Setter
 	private HashSet<Integer> varbitsToCheck;
 
+	@Setter
 	private HashSet<Integer> varpsToCheck;
 
 	@Setter
 	private boolean manifestSuccess;
 
-	@Getter
-	@Setter
-	private String manifestVersion = "";
-
 	private int[] oldVarps;
+	private boolean allowDump = true;
 	private final HashMultimap<Integer, Integer> varpToVarbitMapping = HashMultimap.create();
 	private final HashMap<String, Integer> skillLevelCache = new HashMap<>();
 	private final int SECONDS_BETWEEN_UPLOADS = 10;
-	private final int SECONDS_BETWEEN_MANIFEST_CHECKS = 60*20; // 20 minutes
 	private final int VARBITS_ARCHIVE_ID = 14;
 
 	public static final String CONFIG_GROUP_KEY = "WikiSync";
 	// THIS VERSION SHOULD BE INCREMENTED EVERY RELEASE WHERE WE ADD A NEW TOGGLE
 	public static final int VERSION = 1;
-
 
 	@Provides
 	WikiSyncConfig getConfig(ConfigManager configManager)
@@ -105,6 +100,7 @@ public class WikiSyncPlugin extends Plugin
 	{
 		log.info("WikiSync started!");
 		setTogglesBasedOnVersion();
+		allowDump = true;
 		manifestSuccess = false;
 		skillLevelCache.clear();
 		dataManager.getManifest();
@@ -119,37 +115,26 @@ public class WikiSyncPlugin extends Plugin
 	}
 
 	@Schedule(
-		period = SECONDS_BETWEEN_MANIFEST_CHECKS,
-		unit = ChronoUnit.SECONDS,
-		asynchronous = true
-	)
-	public void checkManifest()
-	{
-		dataManager.checkManifest();
-	}
-
-	@Schedule(
 		period = SECONDS_BETWEEN_UPLOADS,
 		unit = ChronoUnit.SECONDS,
 		asynchronous = true
 	)
 	public void submitToAPI()
 	{
-		try
-		{
-			dataManager.submitToAPI();
-		}
-		catch (IOException e)
-		{
-			log.error(e.getLocalizedMessage());
-		}
+		dataManager.submitToAPI();
 	}
 
 	@Subscribe
 	public void onGameStateChanged(GameStateChanged gameStateChanged)
 	{
-		if (gameStateChanged.getGameState() == GameState.LOGGING_IN)
+		handleInitialDump(gameStateChanged.getGameState());
+	}
+
+	public void handleInitialDump(GameState gameState)
+	{
+		if (gameState == GameState.LOGGED_IN  && allowDump)
 		{
+			allowDump = false;
 			loadInitialData();
 		}
 	}
@@ -192,32 +177,21 @@ public class WikiSyncPlugin extends Plugin
 		});
 	}
 
-	public void loadInitialData()
+	private void loadInitialData()
 	{
-		if (client == null)
-			return;
-		GameState g = client.getGameState();
-		if (g == GameState.LOGGING_IN || g == GameState.LOGGED_IN || g == GameState.LOADING || g == GameState.HOPPING)
+		for(int varbIndex : varbitsToCheck)
 		{
-			synchronized (this)
-			{
-				for (int varbIndex : varbitsToCheck)
-				{
-					dataManager.storeVarbitChanged(varbIndex, client.getVarbitValue(varbIndex));
-				}
+			dataManager.storeVarbitChanged(varbIndex, client.getVarbitValue(varbIndex));
+		}
 
-				for (int varpIndex : varpsToCheck)
-				{
-					dataManager.storeVarpChanged(varpIndex, client.getVarpValue(varpIndex));
-				}
-			}
-			for (Skill s : Skill.values())
-			{
-				if (s != Skill.OVERALL)
-				{
-					dataManager.storeSkillChanged(s.getName(), client.getRealSkillLevel(s));
-				}
-			}
+		for(int varpIndex : varpsToCheck)
+		{
+			dataManager.storeVarpChanged(varpIndex, client.getVarpValue(varpIndex));
+		}
+		for(Skill s : Skill.values())
+		{
+			if (s != Skill.OVERALL)
+				dataManager.storeSkillChanged(s.getName(), client.getRealSkillLevel(s));
 		}
 	}
 
@@ -225,39 +199,24 @@ public class WikiSyncPlugin extends Plugin
 	public void onVarbitChanged(VarbitChanged varbitChanged)
 	{
 		if (client == null || varpsToCheck == null || varbitsToCheck == null)
-		{
 			return;
-		}
 		if (oldVarps == null)
-		{
 			setupVarpTracking();
-		}
 
 		int varpIndexChanged = varbitChanged.getIndex();
-		synchronized (this)
+		if (varpsToCheck.contains(varpIndexChanged))
 		{
-			if (varpsToCheck.contains(varpIndexChanged))
-			{
-				dataManager.storeVarpChanged(varpIndexChanged, client.getVarpValue(varpIndexChanged));
-			}
+			dataManager.storeVarpChanged(varpIndexChanged, client.getVarpValue(varpIndexChanged));
 		}
-
 		for (Integer i : varpToVarbitMapping.get(varpIndexChanged))
 		{
-			synchronized (this)
-			{
-				if (!varbitsToCheck.contains(i))
-				{
-					continue;
-				}
-			}
+			if (!varbitsToCheck.contains(i))
+				continue;
 			// For each varbit index, see if it changed.
 			int oldValue = client.getVarbitValue(oldVarps, i);
 			int newValue = client.getVarbitValue(i);
 			if (oldValue != newValue)
-			{
 				dataManager.storeVarbitChanged(i, newValue);
-			}
 		}
 		oldVarps[varpIndexChanged] = client.getVarpValue(varpIndexChanged);
 	}
@@ -266,10 +225,8 @@ public class WikiSyncPlugin extends Plugin
 	public void onStatChanged(StatChanged statChanged)
 	{
 		if (statChanged.getSkill() == null || statChanged.getSkill() == Skill.OVERALL)
-		{
 			return;
-		}
-		Integer cachedLevel = skillLevelCache.get(statChanged.getSkill().getName());
+	    Integer cachedLevel = skillLevelCache.get(statChanged.getSkill().getName());
 		if (cachedLevel == null || cachedLevel != statChanged.getLevel())
 		{
 			skillLevelCache.put(statChanged.getSkill().getName(), statChanged.getLevel());
@@ -282,9 +239,7 @@ public class WikiSyncPlugin extends Plugin
 		// Conditionally turn off certain features by default
 		Integer version = configManager.getConfiguration(CONFIG_GROUP_KEY, WikiSyncConfig.WIKISYNC_VERSION_KEYNAME, Integer.class);
 		if (version == null)
-		{
 			return;
-		}
 		int maxVersion = version;
 		/* EXAMPLE TOGGLE SETTING CLAUSE */
 		/* if (version < 2)
@@ -299,21 +254,4 @@ public class WikiSyncPlugin extends Plugin
 		configManager.setConfiguration(CONFIG_GROUP_KEY, WikiSyncConfig.WIKISYNC_VERSION_KEYNAME, maxVersion);
 		log.debug("WikiSync version set to deployment number " + version);
 	}
-
-	public void setVarbitsToCheck(HashSet<Integer> varbitsToCheck)
-	{
-		synchronized (this)
-		{
-			this.varbitsToCheck = varbitsToCheck;
-		}
-	}
-
-	public void setVarpsToCheck(HashSet<Integer> varpsToCheck)
-	{
-		synchronized (this)
-		{
-			this.varpsToCheck = varpsToCheck;
-		}
-	}
-
 }

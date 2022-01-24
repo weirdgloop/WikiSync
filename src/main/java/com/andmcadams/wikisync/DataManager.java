@@ -28,7 +28,6 @@ import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParseException;
 import com.google.gson.JsonSyntaxException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -74,10 +73,8 @@ public class DataManager
 
 	private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
 	private static final String MANIFEST_ENDPOINT = "https://sync.runescape.wiki/runelite/manifest";
-	private static final String VERSION_ENDPOINT = "https://sync.runescape.wiki/runelite/version";
 	private static final String POST_ENDPOINT = "https://sync.runescape.wiki/runelite/submit";
 
-	private RuneScapeProfileType lastProfileType = null;
 
 	public void storeVarbitChanged(int varbIndex, int varbValue)
 	{
@@ -85,15 +82,6 @@ public class DataManager
 		synchronized (this)
 		{
 			varbData.put(varbIndex, varbValue);
-		}
-	}
-
-	public void restoreVarbitChanged(int varbIndex, int varbValue)
-	{
-		synchronized (this)
-		{
-			if (!varbData.containsKey(varbIndex))
-				storeVarbitChanged(varbIndex, varbValue);
 		}
 	}
 
@@ -106,15 +94,6 @@ public class DataManager
 		}
 	}
 
-	public void restoreVarpChanged(int varpIndex, int varpValue)
-	{
-		synchronized (this)
-		{
-			if (!varpData.containsKey(varpIndex))
-				storeVarpChanged(varpIndex, varpValue);
-		}
-	}
-
 	public void storeSkillChanged(String skill, int skillLevel)
 	{
 		log.debug("Stored skill " + skill + " with level " + skillLevel);
@@ -122,36 +101,6 @@ public class DataManager
 		{
 			levelData.put(skill, skillLevel);
 		}
-	}
-
-	public void restoreSkillChanged(String skill, int skillLevel)
-	{
-		synchronized (this)
-		{
-			if (!levelData.containsKey(skill))
-				storeSkillChanged(skill, skillLevel);
-		}
-	}
-
-	private boolean clearAllIfProfileChanged()
-	{
-		RuneScapeProfileType r = RuneScapeProfileType.getCurrent(client);
-		if (lastProfileType == null)
-			lastProfileType = r;
-		if (!lastProfileType.equals(r))
-		{
-			log.debug("Clearing all data...");
-			lastProfileType = r;
-			synchronized (this)
-			{
-				varbData.clear();
-				varpData.clear();
-				levelData.clear();
-			}
-			return true;
-		}
-		return false;
-
 	}
 
 	private <K, V> HashMap<K, V> clearChanges(HashMap<K, V> h)
@@ -174,7 +123,7 @@ public class DataManager
 		return !(varbData.isEmpty() && varpData.isEmpty() && levelData.isEmpty());
 	}
 
-	private JsonObject convertToJson()
+	private String convertToJson()
 	{
 		HashMap<Integer, Integer> tempVarbData = clearChanges(varbData);
 		HashMap<Integer, Integer> tempVarpData = clearChanges(varpData);
@@ -190,62 +139,38 @@ public class DataManager
 		parent.addProperty("profile", RuneScapeProfileType.getCurrent(client).name());
 		parent.add("data", j);
 
-		return parent;
+		return parent.toString();
 	}
 
-	protected void submitToAPI() throws IOException
+	protected void submitToAPI()
 	{
-		// If we have changed profiles, clear all our data and start fresh.
-		if (clearAllIfProfileChanged())
-		{
-			clientThread.invoke(() -> {
-				plugin.loadInitialData();
-				return true;
-			});
-			return;
-		}
-		// If we do not have data or the player is gone, do not push anything.
 		if (!hasDataToPush() || client.getLocalPlayer() == null || client.getLocalPlayer().getName() == null)
 			return;
 
 		if (RuneScapeProfileType.getCurrent(client) == RuneScapeProfileType.BETA)
 			return;
 
-		JsonObject jObj = convertToJson();
 		log.debug("Submitting changed data to endpoint...");
 		Request r = new Request.Builder()
 			.url(POST_ENDPOINT)
-			.post(RequestBody.create(JSON, jObj.toString()))
+			.post(RequestBody.create(JSON, convertToJson()))
 			.build();
 
-		try (Response response = okHttpClient.newCall(r).execute())
+		okHttpClient.newCall(r).enqueue(new Callback()
 		{
-			if (!response.isSuccessful())
+			@Override
+			public void onFailure(@NonNull Call call, @NonNull IOException e)
 			{
-				log.error("Failed to submit data, attempting to reload dropped data...");
-				// If we fail to submit data, try to recover as much as possible without squashing newer data.
-				JsonObject dataObj = jObj.getAsJsonObject("data");
-				JsonObject varbObj = dataObj.getAsJsonObject("varb");
-				JsonObject varpObj = dataObj.getAsJsonObject("varp");
-				JsonObject levelObj = dataObj.getAsJsonObject("level");
-				for (String k : varbObj.keySet())
-				{
-					this.restoreVarbitChanged(Integer.parseInt(k), varbObj.get(k).getAsInt());
-				}
-				for (String k : varpObj.keySet())
-				{
-					this.restoreVarpChanged(Integer.parseInt(k), varpObj.get(k).getAsInt());
-				}
-				for (String k : levelObj.keySet())
-				{
-					this.restoreSkillChanged(k, levelObj.get(k).getAsInt());
-				}
+				log.error("Error sending changed data", e);
 			}
-		}
-		catch (JsonParseException ex)
-		{
-			throw new IOException(ex);
-		}
+
+			@Override
+			public void onResponse(@NonNull Call call, @NonNull Response response)
+			{
+				log.debug("Successfully sent changed data");
+				response.close();
+			}
+		});
 	}
 
 	private HashSet<Integer> parseSet(JsonArray j)
@@ -289,17 +214,17 @@ public class DataManager
 								response.close();
 								return;
 							}
-							String bodyString = response.body().string();
-							JsonObject j = new Gson().fromJson(bodyString, JsonObject.class);
+							JsonObject j = new Gson().fromJson(response.body().string(), JsonObject.class);
 							try
 							{
 								plugin.setVarbitsToCheck(parseSet(j.getAsJsonArray("varbits")));
 								plugin.setVarpsToCheck(parseSet(j.getAsJsonArray("varps")));
-								plugin.setManifestVersion(j.getAsJsonPrimitive("version").getAsString());
 								plugin.setManifestSuccess(true);
-								// Load initial data dump if the player is logged in, loading, or hopping.
+								// This will not actually push anything if the player is not logged in.
+								// If the player is logged in, this ensures that we run after grabbing the manifest.
 								clientThread.invoke(() -> {
-									plugin.loadInitialData();
+									if (client != null && client.getGameState() != null)
+										plugin.handleInitialDump(client.getGameState());
 									return true;
 								});
 							}
@@ -325,82 +250,6 @@ public class DataManager
 						if (response.body() == null)
 						{
 							log.error("Manifest request returned empty body");
-						}
-						else
-						{
-							log.error(response.body().toString());
-						}
-					}
-					response.close();
-				}
-			});
-		}
-		catch (IllegalArgumentException e)
-		{
-			log.error("Bad URL given: " + e.getLocalizedMessage());
-		}
-	}
-
-	protected void checkManifest()
-	{
-		try
-		{
-			Request r = new Request.Builder()
-				.url(VERSION_ENDPOINT)
-				.build();
-			okHttpClient.newCall(r).enqueue(new Callback()
-			{
-				@Override
-				public void onFailure(@NonNull Call call, @NonNull IOException e)
-				{
-					log.error("Error checking manifest version", e);
-				}
-
-				@Override
-				public void onResponse(@NonNull Call call, @NonNull Response response)
-				{
-					if (response.isSuccessful())
-					{
-						try
-						{
-							if (response.body() == null)
-							{
-								log.error("Manifest check request succeeded but returned empty body");
-								response.close();
-								return;
-							}
-							String bodyString = response.body().string();
-							JsonObject j = new Gson().fromJson(bodyString, JsonObject.class);
-							try
-							{
-								String manifestVersion = j.getAsJsonPrimitive("version").getAsString();
-								if (!plugin.getManifestVersion().equals(manifestVersion))
-								{
-									getManifest();
-								}
-							}
-							catch (NullPointerException e) {
-								// This is probably an issue with the server. "version" might be missing.
-								log.error("Manifest check possibly missing version entry");
-								log.error(e.getLocalizedMessage());
-							}
-							catch (ClassCastException e) {
-								// This is probably an issue with the server. "version" might be not be a string.
-								log.error("Manifest check from call might have version as not a String");
-								log.error(e.getLocalizedMessage());
-							}
-						}
-						catch (IOException | JsonSyntaxException e)
-						{
-							log.error(e.getLocalizedMessage());
-						}
-					}
-					else
-					{
-						log.error("Manifest check request returned with status " + response.code());
-						if (response.body() == null)
-						{
-							log.error("Manifest check request returned empty body");
 						}
 						else
 						{
