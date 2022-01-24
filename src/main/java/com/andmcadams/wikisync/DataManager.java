@@ -29,6 +29,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonSyntaxException;
+import java.util.concurrent.TimeUnit;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
@@ -75,13 +76,22 @@ public class DataManager
 	private static final String MANIFEST_ENDPOINT = "https://sync.runescape.wiki/runelite/manifest";
 	private static final String POST_ENDPOINT = "https://sync.runescape.wiki/runelite/submit";
 
-
 	public void storeVarbitChanged(int varbIndex, int varbValue)
 	{
 		log.debug("Stored varb with index " + varbIndex + " and value " + varbValue);
 		synchronized (this)
 		{
 			varbData.put(varbIndex, varbValue);
+		}
+	}
+
+	public void storeVarbitChangedIfNotStored(int varbIndex, int varbValue)
+	{
+		log.debug("Attempting to store varb with index " + varbIndex + " and value " + varbValue);
+		synchronized (this)
+		{
+			if (!varbData.containsKey(varbIndex))
+				this.storeVarbitChanged(varbIndex, varbValue);
 		}
 	}
 
@@ -94,12 +104,32 @@ public class DataManager
 		}
 	}
 
+	public void storeVarpChangedIfNotStored(int varpIndex, int varpValue)
+	{
+		log.debug("Attempting to store varp with index " + varpIndex + " and value " + varpValue);
+		synchronized (this)
+		{
+			if (!varpData.containsKey(varpIndex))
+				this.storeVarpChanged(varpIndex, varpValue);
+		}
+	}
+
 	public void storeSkillChanged(String skill, int skillLevel)
 	{
 		log.debug("Stored skill " + skill + " with level " + skillLevel);
 		synchronized (this)
 		{
 			levelData.put(skill, skillLevel);
+		}
+	}
+
+	public void storeSkillChangedIfNotChanged(String skill, int skillLevel)
+	{
+		log.debug("Attempting to store skill " + skill + " with level " + skillLevel);
+		synchronized (this)
+		{
+			if (!levelData.containsKey(skill))
+				storeSkillChanged(skill, skillLevel);
 		}
 	}
 
@@ -157,6 +187,34 @@ public class DataManager
 		return parent;
 	}
 
+	private void restoreData(JsonObject jObj)
+	{
+		synchronized (this)
+		{
+			if (!jObj.get("profile").getAsString().equals(RuneScapeProfileType.getCurrent(client).name()))
+			{
+				log.error("Not restoring data from failed call since the profile type has changed");
+				return;
+			}
+			JsonObject dataObj = jObj.getAsJsonObject("data");
+			JsonObject varbObj = dataObj.getAsJsonObject("varb");
+			JsonObject varpObj = dataObj.getAsJsonObject("varp");
+			JsonObject levelObj = dataObj.getAsJsonObject("level");
+			for (String k : varbObj.keySet())
+			{
+				this.storeVarbitChangedIfNotStored(Integer.parseInt(k), varbObj.get(k).getAsInt());
+			}
+			for (String k : varpObj.keySet())
+			{
+				this.storeVarpChangedIfNotStored(Integer.parseInt(k), varpObj.get(k).getAsInt());
+			}
+			for (String k : levelObj.keySet())
+			{
+				this.storeSkillChangedIfNotChanged(k, levelObj.get(k).getAsInt());
+			}
+		}
+	}
+
 	protected void submitToAPI()
 	{
 		if (!hasDataToPush() || client.getLocalPlayer() == null || client.getLocalPlayer().getName() == null)
@@ -166,26 +224,29 @@ public class DataManager
 			return;
 
 		log.debug("Submitting changed data to endpoint...");
-		Request r = new Request.Builder()
+		JsonObject postRequestBody = convertToJson();
+		Request request = new Request.Builder()
 			.url(POST_ENDPOINT)
-			.post(RequestBody.create(JSON, convertToJson().toString()))
+			.post(RequestBody.create(JSON, postRequestBody.toString()))
 			.build();
 
-		okHttpClient.newCall(r).enqueue(new Callback()
+		OkHttpClient shortTimeoutClient = okHttpClient.newBuilder()
+			.callTimeout(5, TimeUnit.SECONDS)
+			.build();
+		try (Response response = shortTimeoutClient.newCall(request).execute())
 		{
-			@Override
-			public void onFailure(@NonNull Call call, @NonNull IOException e)
+			if (!response.isSuccessful())
 			{
-				log.error("Error sending changed data", e);
+				// If we failed to submit, readd the data to the data lists (unless there are newer ones)
+				log.error("Failed to submit data, attempting to reload dropped data...");
+				this.restoreData(postRequestBody);
 			}
-
-			@Override
-			public void onResponse(@NonNull Call call, @NonNull Response response)
-			{
-				log.debug("Successfully sent changed data");
-				response.close();
-			}
-		});
+		}
+		catch (IOException ioException)
+		{
+			log.error("Failed to submit data, attempting to reload dropped data...");
+			this.restoreData(postRequestBody);
+		}
 	}
 
 	private HashSet<Integer> parseSet(JsonArray j)
