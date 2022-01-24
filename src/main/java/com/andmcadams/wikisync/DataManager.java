@@ -133,7 +133,7 @@ public class DataManager
 		return !(varbData.isEmpty() && varpData.isEmpty() && levelData.isEmpty());
 	}
 
-	private String convertToJson()
+	private JsonObject convertToJson()
 	{
 		JsonObject j = new JsonObject();
 		JsonObject parent = new JsonObject();
@@ -154,7 +154,7 @@ public class DataManager
 			parent.add("data", j);
 		}
 		log.info(parent.toString());
-		return parent.toString();
+		return parent;
 	}
 
 	protected void submitToAPI()
@@ -168,7 +168,7 @@ public class DataManager
 		log.debug("Submitting changed data to endpoint...");
 		Request r = new Request.Builder()
 			.url(POST_ENDPOINT)
-			.post(RequestBody.create(JSON, convertToJson()))
+			.post(RequestBody.create(JSON, convertToJson().toString()))
 			.build();
 
 		okHttpClient.newCall(r).enqueue(new Callback()
