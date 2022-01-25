@@ -26,6 +26,8 @@ package com.andmcadams.wikisync;
 
 import com.google.common.collect.HashMultimap;
 import com.google.inject.Provides;
+import java.util.concurrent.atomic.AtomicReference;
+import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
@@ -71,21 +73,19 @@ public class WikiSyncPlugin extends Plugin
 	@Inject
 	private WikiSyncConfig config;
 
+	@Getter
 	@Setter
-	private HashSet<Integer> varbitsToCheck;
-
-	@Setter
-	private HashSet<Integer> varpsToCheck;
-
-	@Setter
-	private boolean manifestSuccess;
+	private int lastManifestVersion = -1;
 
 	private int[] oldVarps;
-	private boolean allowDump = true;
 	private RuneScapeProfileType lastProfile;
+	private final AtomicReference<HashSet<Integer>> varbitsToCheck = new AtomicReference<>();
+	private final AtomicReference<HashSet<Integer>> varpsToCheck = new AtomicReference<>();
+
 	private final HashMultimap<Integer, Integer> varpToVarbitMapping = HashMultimap.create();
 	private final HashMap<String, Integer> skillLevelCache = new HashMap<>();
 	private final int SECONDS_BETWEEN_UPLOADS = 10;
+	private final int SECONDS_BETWEEN_MANIFEST_CHECKS = 20*60;
 	private final int VARBITS_ARCHIVE_ID = 14;
 
 	public static final String CONFIG_GROUP_KEY = "WikiSync";
@@ -103,8 +103,6 @@ public class WikiSyncPlugin extends Plugin
 	{
 		log.info("WikiSync started!");
 		setTogglesBasedOnVersion();
-		allowDump = true;
-		manifestSuccess = false;
 		lastProfile = null;
 		skillLevelCache.clear();
 		dataManager.getManifest();
@@ -114,8 +112,8 @@ public class WikiSyncPlugin extends Plugin
 	protected void shutDown() throws Exception
 	{
 		log.info("WikiSync stopped!");
-		varbitsToCheck = null;
-		varpsToCheck = null;
+		varbitsToCheck.set(null);
+		varpsToCheck.set(null);
 		dataManager.clearData();
 	}
 
@@ -130,6 +128,20 @@ public class WikiSyncPlugin extends Plugin
 			dataManager.submitToAPI();
 	}
 
+	@Schedule(
+		period = SECONDS_BETWEEN_MANIFEST_CHECKS,
+		unit = ChronoUnit.SECONDS,
+		asynchronous = true
+	)
+	public void resyncManifest()
+	{
+		log.debug("Attempting to resync manifest");
+		if (dataManager.getVersion() != lastManifestVersion)
+		{
+			dataManager.getManifest();
+		}
+	}
+
 	@Subscribe
 	public void onGameTick(GameTick gameTick)
 	{
@@ -140,13 +152,15 @@ public class WikiSyncPlugin extends Plugin
 	public void checkProfileChange()
 	{
 		RuneScapeProfileType r = RuneScapeProfileType.getCurrent(client);
-		if (r != lastProfile && client != null && varbitsToCheck != null && varpsToCheck != null)
+		HashSet<Integer> vvarbitsToCheck = varbitsToCheck.get();
+		HashSet<Integer> vvarpsToCheck = varpsToCheck.get();
+		if (r != lastProfile && client != null && vvarbitsToCheck != null && vvarpsToCheck != null)
 		{
 			// profile change, we should clear the datamanager and do a new initial dump
-			log.error("Profile changed!!");
+			log.debug("Profile seemed to change... Reloading all data and updating profile");
 			lastProfile = r;
 			dataManager.clearData();
-			loadInitialData();
+			loadInitialData(vvarbitsToCheck, vvarpsToCheck);
 		}
 	}
 
@@ -188,14 +202,14 @@ public class WikiSyncPlugin extends Plugin
 		});
 	}
 
-	private void loadInitialData()
+	public void loadInitialData(HashSet<Integer> vvarbitsToCheck, HashSet<Integer> vvarpsToCheck)
 	{
-		for(int varbIndex : varbitsToCheck)
+		for(int varbIndex : vvarbitsToCheck)
 		{
 			dataManager.storeVarbitChanged(varbIndex, client.getVarbitValue(varbIndex));
 		}
 
-		for(int varpIndex : varpsToCheck)
+		for(int varpIndex : vvarpsToCheck)
 		{
 			dataManager.storeVarpChanged(varpIndex, client.getVarpValue(varpIndex));
 		}
@@ -209,19 +223,21 @@ public class WikiSyncPlugin extends Plugin
 	@Subscribe
 	public void onVarbitChanged(VarbitChanged varbitChanged)
 	{
-		if (client == null || varpsToCheck == null || varbitsToCheck == null)
+		HashSet<Integer> vvarbitsToCheck = varbitsToCheck.get();
+		HashSet<Integer> vvarpsToCheck = varpsToCheck.get();
+		if (client == null || vvarbitsToCheck == null || vvarpsToCheck == null)
 			return;
 		if (oldVarps == null)
 			setupVarpTracking();
 
 		int varpIndexChanged = varbitChanged.getIndex();
-		if (varpsToCheck.contains(varpIndexChanged))
+		if (vvarpsToCheck.contains(varpIndexChanged))
 		{
 			dataManager.storeVarpChanged(varpIndexChanged, client.getVarpValue(varpIndexChanged));
 		}
 		for (Integer i : varpToVarbitMapping.get(varpIndexChanged))
 		{
-			if (!varbitsToCheck.contains(i))
+			if (!vvarbitsToCheck.contains(i))
 				continue;
 			// For each varbit index, see if it changed.
 			int oldValue = client.getVarbitValue(oldVarps, i);
@@ -264,5 +280,15 @@ public class WikiSyncPlugin extends Plugin
 		// This is done here and not in each block because we don't want to rely on the order of the if clauses being correct.
 		configManager.setConfiguration(CONFIG_GROUP_KEY, WikiSyncConfig.WIKISYNC_VERSION_KEYNAME, maxVersion);
 		log.debug("WikiSync version set to deployment number " + version);
+	}
+
+	public void setVarbitsToCheck(HashSet<Integer> varbitsToCheck)
+	{
+		this.varbitsToCheck.set(varbitsToCheck);
+	}
+
+	public void setVarpsToCheck(HashSet<Integer> varpsToCheck)
+	{
+		this.varpsToCheck.set(varpsToCheck);
 	}
 }

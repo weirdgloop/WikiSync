@@ -74,6 +74,7 @@ public class DataManager
 
 	private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
 	private static final String MANIFEST_ENDPOINT = "https://sync.runescape.wiki/runelite/manifest";
+	private static final String VERSION_ENDPOINT = "https://sync.runescape.wiki/runelite/version";
 	private static final String POST_ENDPOINT = "https://sync.runescape.wiki/runelite/submit";
 
 	public void storeVarbitChanged(int varbIndex, int varbValue)
@@ -183,7 +184,7 @@ public class DataManager
 			parent.addProperty("profile", r.name());
 			parent.add("data", j);
 		}
-		log.info(parent.toString());
+		log.debug(parent.toString());
 		return parent;
 	}
 
@@ -261,6 +262,7 @@ public class DataManager
 
 	protected void getManifest()
 	{
+		log.debug("Getting manifest file...");
 		try
 		{
 			Request r = new Request.Builder()
@@ -293,9 +295,26 @@ public class DataManager
 							JsonObject j = new Gson().fromJson(response.body().string(), JsonObject.class);
 							try
 							{
-								plugin.setVarbitsToCheck(parseSet(j.getAsJsonArray("varbits")));
-								plugin.setVarpsToCheck(parseSet(j.getAsJsonArray("varps")));
-								plugin.setManifestSuccess(true);
+								HashSet<Integer> varbitsToCheck = parseSet(j.getAsJsonArray("varbits"));
+								HashSet<Integer> varpsToCheck = parseSet(j.getAsJsonArray("varps"));
+								plugin.setVarbitsToCheck(varbitsToCheck);
+								plugin.setVarpsToCheck(varpsToCheck);
+								try
+								{
+									// Maybe this function should be run synch and this should be done outside of this
+									int manifestVersion = j.get("version").getAsInt();
+									if (plugin.getLastManifestVersion() != manifestVersion)
+									{
+										plugin.setLastManifestVersion(manifestVersion);
+										clientThread.invoke(() -> {
+											plugin.loadInitialData(varbitsToCheck, varpsToCheck);
+										});
+									}
+								}
+								catch (UnsupportedOperationException | NullPointerException exception)
+								{
+									plugin.setLastManifestVersion(-1);
+								}
 							}
 							catch (NullPointerException e) {
 								// This is probably an issue with the server. "varbits" or "varps" might be missing.
@@ -334,4 +353,38 @@ public class DataManager
 			log.error("Bad URL given: " + e.getLocalizedMessage());
 		}
 	}
+
+	protected int getVersion()
+	{
+		log.debug("Attempting to get manifest version...");
+		Request request = new Request.Builder()
+			.url(VERSION_ENDPOINT)
+			.build();
+
+		try (Response response = okHttpClient.newCall(request).execute())
+		{
+			if (!response.isSuccessful())
+			{
+				log.error("Failed to grab manifest version...");
+			}
+			else
+			{
+				try {
+					JsonObject jObj = new Gson().fromJson(response.body().string(), JsonObject.class);
+					log.debug("Found manifest version " + jObj.getAsJsonPrimitive("version").getAsInt());
+					return jObj.getAsJsonPrimitive("version").getAsInt();
+				}
+				catch (IOException | NullPointerException exception)
+				{
+					log.error("Failed to parse manifest version...");
+				}
+			}
+		}
+		catch (IOException ioException)
+		{
+			log.error("Failed to grab manifest version...");
+		}
+		return -1;
+	}
+
 }
