@@ -307,7 +307,7 @@ public class DataManager
 									{
 										plugin.setLastManifestVersion(manifestVersion);
 										clientThread.invoke(() -> {
-											plugin.loadInitialData(varbitsToCheck, varpsToCheck);
+											plugin.loadInitialData();
 										});
 									}
 								}
