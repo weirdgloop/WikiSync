@@ -295,10 +295,8 @@ public class DataManager
 							JsonObject j = new Gson().fromJson(response.body().string(), JsonObject.class);
 							try
 							{
-								HashSet<Integer> varbitsToCheck = parseSet(j.getAsJsonArray("varbits"));
-								HashSet<Integer> varpsToCheck = parseSet(j.getAsJsonArray("varps"));
-								plugin.setVarbitsToCheck(varbitsToCheck);
-								plugin.setVarpsToCheck(varpsToCheck);
+								plugin.setVarbitsToCheck(parseSet(j.getAsJsonArray("varbits")));
+								plugin.setVarpsToCheck(parseSet(j.getAsJsonArray("varps")));
 								try
 								{
 									// Maybe this function should be run synch and this should be done outside of this
