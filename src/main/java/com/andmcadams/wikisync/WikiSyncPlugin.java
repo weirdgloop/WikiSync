@@ -24,31 +24,31 @@
  */
 package com.andmcadams.wikisync;
 
-import com.google.common.collect.HashMultimap;
+import com.google.common.collect.Maps;
+import com.google.gson.Gson;
 import com.google.inject.Provides;
-import java.io.IOException;
-import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
-import net.runelite.api.IndexDataBase;
 import net.runelite.api.Skill;
 import net.runelite.api.VarbitComposition;
-import net.runelite.api.events.GameStateChanged;
-import net.runelite.api.events.StatChanged;
-import net.runelite.api.events.VarbitChanged;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
-import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.config.RuneScapeProfileType;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.task.Schedule;
+import okhttp3.*;
 
 import javax.inject.Inject;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
-import java.util.HashSet;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @PluginDescriptor(
@@ -66,33 +66,33 @@ public class WikiSyncPlugin extends Plugin
 	private ConfigManager configManager;
 
 	@Inject
-	private DataManager dataManager;
-
-	@Inject
 	private WikiSyncConfig config;
 
-	private HashSet<Integer> varbitsToCheck;
+	@Inject
+	private Gson gson;
 
-	private HashSet<Integer> varpsToCheck;
+	@Inject
+	private OkHttpClient okHttpClient;
 
-	@Setter
-	private boolean manifestSuccess;
+	private OkHttpClient shortTimeoutClient;
 
-	@Getter
-	@Setter
-	private String manifestVersion = "";
+	private static final int SECONDS_BETWEEN_UPLOADS = 1;
+	private static final int UPLOADS_PER_MANIFEST_CHECK = 2;
 
-	private int[] oldVarps;
-	private final HashMultimap<Integer, Integer> varpToVarbitMapping = HashMultimap.create();
-	private final HashMap<String, Integer> skillLevelCache = new HashMap<>();
-	private final int SECONDS_BETWEEN_UPLOADS = 10;
-	private final int SECONDS_BETWEEN_MANIFEST_CHECKS = 60*20; // 20 minutes
-	private final int VARBITS_ARCHIVE_ID = 14;
+	private static final String MANIFEST_URL = "https://sync.runescape.wiki/runelite/manifest";
+	private static final String SUBMIT_URL = "https://sync.runescape.wiki/runelite/submit";
+	private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
+
+	private static final int VARBITS_ARCHIVE_ID = 14;
+	private Map<Integer, VarbitComposition> varbitCompositions = new HashMap<>();
 
 	public static final String CONFIG_GROUP_KEY = "WikiSync";
 	// THIS VERSION SHOULD BE INCREMENTED EVERY RELEASE WHERE WE ADD A NEW TOGGLE
 	public static final int VERSION = 1;
 
+	private Manifest manifest;
+	private int grabCount = 0;
+	private Map<PlayerProfile, PlayerData> playerDataMap = new HashMap<>();
 
 	@Provides
 	WikiSyncConfig getConfig(ConfigManager configManager)
@@ -101,31 +101,20 @@ public class WikiSyncPlugin extends Plugin
 	}
 
 	@Override
-	protected void startUp() throws Exception
+	public void startUp()
 	{
-		log.info("WikiSync started!");
-		setTogglesBasedOnVersion();
-		manifestSuccess = false;
-		skillLevelCache.clear();
-		dataManager.getManifest();
-	}
-
-	@Override
-	protected void shutDown() throws Exception
-	{
-		log.info("WikiSync stopped!");
-		varbitsToCheck = null;
-		varpsToCheck = null;
-	}
-
-	@Schedule(
-		period = SECONDS_BETWEEN_MANIFEST_CHECKS,
-		unit = ChronoUnit.SECONDS,
-		asynchronous = true
-	)
-	public void checkManifest()
-	{
-		dataManager.checkManifest();
+		clientThread.invoke(() -> {
+			if (client.getIndexConfig() == null)
+			{
+				return false;
+			}
+			final int[] varbitIds = client.getIndexConfig().getFileIds(VARBITS_ARCHIVE_ID);
+			for (int id : varbitIds)
+			{
+				varbitCompositions.put(id, client.getVarbit(id));
+			}
+			return true;
+		});
 	}
 
 	@Schedule(
@@ -133,187 +122,136 @@ public class WikiSyncPlugin extends Plugin
 		unit = ChronoUnit.SECONDS,
 		asynchronous = true
 	)
-	public void submitToAPI()
+	public void task()
 	{
-		try
-		{
-			dataManager.submitToAPI();
-		}
-		catch (IOException e)
-		{
-			log.error(e.getLocalizedMessage());
-		}
-	}
-
-	@Subscribe
-	public void onGameStateChanged(GameStateChanged gameStateChanged)
-	{
-		if (gameStateChanged.getGameState() == GameState.LOGGING_IN)
-		{
-			loadInitialData();
-		}
-	}
-
-	// Need to keep track of old varps and what varps each varb is in.
-	// On change
-	// Get varp, if varp in hashset, queue it.
-	// Get each varb index in varp. If varb changed and varb in hashset, queue it.
-	// Checking if varb has changed requires us to keep track of old varps
-	private void setupVarpTracking()
-	{
-		// Init stuff to keep track of varb changes
-		varpToVarbitMapping.clear();
-
-		if (oldVarps == null)
-		{
-			oldVarps = new int[client.getVarps().length];
-		}
-
-		// Set oldVarps to be the current varps
-		System.arraycopy(client.getVarps(), 0, oldVarps, 0, oldVarps.length);
-
-		// For all varbits, add their ids to the multimap with the varp index as their key
-		clientThread.invoke(() -> {
-			if (client.getIndexConfig() == null)
-			{
-				return false;
-			}
-			IndexDataBase indexVarbits = client.getIndexConfig();
-			final int[] varbitIds = indexVarbits.getFileIds(VARBITS_ARCHIVE_ID);
-			for (int id : varbitIds)
-			{
-				VarbitComposition varbit = client.getVarbit(id);
-				if (varbit != null)
-				{
-					varpToVarbitMapping.put(varbit.getIndex(), id);
-				}
-			}
-			return true;
-		});
-	}
-
-	public void loadInitialData()
-	{
-		if (client == null)
-			return;
-		GameState g = client.getGameState();
-		if (g == GameState.LOGGING_IN || g == GameState.LOGGED_IN || g == GameState.LOADING || g == GameState.HOPPING)
-		{
-			synchronized (this)
-			{
-				for (int varbIndex : varbitsToCheck)
-				{
-					dataManager.storeVarbitChanged(varbIndex, client.getVarbitValue(varbIndex));
-				}
-
-				for (int varpIndex : varpsToCheck)
-				{
-					dataManager.storeVarpChanged(varpIndex, client.getVarpValue(varpIndex));
-				}
-			}
-			for (Skill s : Skill.values())
-			{
-				if (s != Skill.OVERALL)
-				{
-					dataManager.storeSkillChanged(s.getName(), client.getRealSkillLevel(s));
-				}
-			}
-		}
-	}
-
-	@Subscribe
-	public void onVarbitChanged(VarbitChanged varbitChanged)
-	{
-		if (client == null || varpsToCheck == null || varbitsToCheck == null)
+		// TODO: do we want other GameStates?
+		if (client.getGameState() != GameState.LOGGED_IN)
 		{
 			return;
 		}
-		if (oldVarps == null)
+		// TODO: find a way to put this somewhere better?
+		shortTimeoutClient = okHttpClient.newBuilder()
+			.callTimeout(3, TimeUnit.SECONDS)
+			.build();
+
+		if (grabCount % UPLOADS_PER_MANIFEST_CHECK == 0)
 		{
-			setupVarpTracking();
+			checkManifest();
 		}
 
-		int varpIndexChanged = varbitChanged.getIndex();
-		synchronized (this)
+		if (manifest == null)
 		{
-			if (varpsToCheck.contains(varpIndexChanged))
-			{
-				dataManager.storeVarpChanged(varpIndexChanged, client.getVarpValue(varpIndexChanged));
-			}
+			// TODO: log something?
+			return;
 		}
 
-		for (Integer i : varpToVarbitMapping.get(varpIndexChanged))
-		{
-			synchronized (this)
-			{
-				if (!varbitsToCheck.contains(i))
-				{
-					continue;
-				}
-			}
-			// For each varbit index, see if it changed.
-			int oldValue = client.getVarbitValue(oldVarps, i);
-			int newValue = client.getVarbitValue(i);
-			if (oldValue != newValue)
-			{
-				dataManager.storeVarbitChanged(i, newValue);
-			}
-		}
-		oldVarps[varpIndexChanged] = client.getVarpValue(varpIndexChanged);
-	}
+		grabCount++;
+		// TODO: check that this doesn't NPE?
+		String username = client.getLocalPlayer().getName();
+		RuneScapeProfileType profileType = RuneScapeProfileType.getCurrent(client);
+		PlayerProfile profileKey = new PlayerProfile(username, profileType);
 
-	@Subscribe
-	public void onStatChanged(StatChanged statChanged)
-	{
-		if (statChanged.getSkill() == null || statChanged.getSkill() == Skill.OVERALL)
+		PlayerData newPlayerData = getPlayerData();
+		PlayerData oldPlayerData = playerDataMap.getOrDefault(profileKey, new PlayerData());
+		if (newPlayerData.equals(oldPlayerData))
 		{
 			return;
 		}
-		Integer cachedLevel = skillLevelCache.get(statChanged.getSkill().getName());
-		if (cachedLevel == null || cachedLevel != statChanged.getLevel())
-		{
-			skillLevelCache.put(statChanged.getSkill().getName(), statChanged.getLevel());
-			dataManager.storeSkillChanged(statChanged.getSkill().getName(), statChanged.getLevel());
-		}
+
+		PlayerData delta = diff(newPlayerData, oldPlayerData);
+		submitPlayerData(profileKey, delta, newPlayerData);
 	}
 
-	private void setTogglesBasedOnVersion()
+	private int getVarbitValue(int varbitId)
 	{
-		// Conditionally turn off certain features by default
-		Integer version = configManager.getConfiguration(CONFIG_GROUP_KEY, WikiSyncConfig.WIKISYNC_VERSION_KEYNAME, Integer.class);
-		if (version == null)
+		VarbitComposition v = varbitCompositions.get(varbitId);
+		if (v == null)
 		{
-			return;
+			return -1;
 		}
-		int maxVersion = version;
-		/* EXAMPLE TOGGLE SETTING CLAUSE */
-		/* if (version < 2)
-		{
-			// Location tracking was added in deploy 2
-			configManager.setConfiguration(CONFIG_GROUP_KEY, WikiSyncConfig.WIKISYNC_TOGGLE_KEYNAME, false);
-			maxVersion = 2;
-		}
-		*/
 
-		// This is done here and not in each block because we don't want to rely on the order of the if clauses being correct.
-		configManager.setConfiguration(CONFIG_GROUP_KEY, WikiSyncConfig.WIKISYNC_VERSION_KEYNAME, maxVersion);
-		log.debug("WikiSync version set to deployment number " + version);
+		int value = client.getVarpValue(v.getIndex());
+		int lsb = v.getLeastSignificantBit();
+		int msb = v.getMostSignificantBit();
+		int mask = (1 << ((msb - lsb) + 1)) - 1;
+		return (value >> lsb) & mask;
 	}
 
-	public void setVarbitsToCheck(HashSet<Integer> varbitsToCheck)
+	private PlayerData getPlayerData()
 	{
-		synchronized (this)
+		PlayerData out = new PlayerData();
+
+		// IMPORTANT TODO: getVarbitValue must be run on client thread. This code hacks around that.
+		for (int varbitId : manifest.varbits)
 		{
-			this.varbitsToCheck = varbitsToCheck;
+			out.varb.put(varbitId, getVarbitValue(varbitId));
 		}
+		for (int varpId : manifest.varps)
+		{
+			out.varp.put(varpId, client.getVarpValue(varpId));
+		}
+		for(Skill s : Skill.values())
+		{
+			out.level.put(s.getName(), client.getRealSkillLevel(s));
+		}
+		return out;
 	}
 
-	public void setVarpsToCheck(HashSet<Integer> varpsToCheck)
+	private PlayerData diff(PlayerData newPlayerData, PlayerData oldPlayerData)
 	{
-		synchronized (this)
+		return new PlayerData(
+				Maps.difference(newPlayerData.varb, oldPlayerData.varb).entriesOnlyOnLeft(),
+				Maps.difference(newPlayerData.varp, oldPlayerData.varp).entriesOnlyOnLeft(),
+				Maps.difference(newPlayerData.level, oldPlayerData.level).entriesOnlyOnLeft()
+		);
+	}
+
+	private void submitPlayerData(PlayerProfile profileKey, PlayerData delta, PlayerData newPlayerData)
+	{
+		PlayerDataSubmission submission = new PlayerDataSubmission(
+				profileKey.getUsername(),
+				profileKey.getProfileType().name(),
+				delta
+		);
+
+		Request request = new Request.Builder()
+				.url(SUBMIT_URL)
+				.post(RequestBody.create(JSON, gson.toJson(submission)))
+				.build();
+
+		try (Response response = shortTimeoutClient.newCall(request).execute())
 		{
-			this.varpsToCheck = varpsToCheck;
+			if (!response.isSuccessful())
+			{
+				// TODO: log something?
+				return;
+			}
+			playerDataMap.put(profileKey, newPlayerData);
+		}
+		catch (IOException ioException)
+		{
+			// TODO: log something?
 		}
 	}
 
+	private void checkManifest()
+	{
+		Request request = new Request.Builder()
+				.url(MANIFEST_URL)
+				.build();
+		try (Response response = shortTimeoutClient.newCall(request).execute())
+		{
+			if (!response.isSuccessful())
+			{
+				// TODO: log something?
+				return;
+			}
+			InputStream in = response.body().byteStream();
+			manifest = gson.fromJson(new InputStreamReader(in, StandardCharsets.UTF_8), Manifest.class);
+		}
+		catch (IOException ioException)
+		{
+			// TODO: log something?
+		}
+	}
 }
