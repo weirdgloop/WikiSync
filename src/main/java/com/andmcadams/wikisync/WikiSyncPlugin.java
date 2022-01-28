@@ -26,6 +26,7 @@ package com.andmcadams.wikisync;
 
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
+import com.google.gson.JsonParseException;
 import com.google.inject.Provides;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
@@ -76,8 +77,8 @@ public class WikiSyncPlugin extends Plugin
 
 	private OkHttpClient shortTimeoutClient;
 
-	private static final int SECONDS_BETWEEN_UPLOADS = 1;
-	private static final int UPLOADS_PER_MANIFEST_CHECK = 2;
+	private static final int SECONDS_BETWEEN_UPLOADS = 10;
+	private static final int UPLOADS_PER_MANIFEST_CHECK = 120;
 
 	private static final String MANIFEST_URL = "https://sync.runescape.wiki/runelite/manifest";
 	private static final String SUBMIT_URL = "https://sync.runescape.wiki/runelite/submit";
@@ -226,6 +227,7 @@ public class WikiSyncPlugin extends Plugin
 				// TODO: log something?
 				return;
 			}
+			// TODO: if we have multiple periods, this needs to be merged into prior
 			playerDataMap.put(profileKey, newPlayerData);
 		}
 		catch (IOException ioException)
@@ -249,7 +251,7 @@ public class WikiSyncPlugin extends Plugin
 			InputStream in = response.body().byteStream();
 			manifest = gson.fromJson(new InputStreamReader(in, StandardCharsets.UTF_8), Manifest.class);
 		}
-		catch (IOException ioException)
+		catch (IOException | JsonParseException e)
 		{
 			// TODO: log something?
 		}

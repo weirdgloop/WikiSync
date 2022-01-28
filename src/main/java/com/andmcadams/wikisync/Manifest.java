@@ -5,7 +5,7 @@ import lombok.Data;
 @Data
 public class Manifest
 {
-    final int version;
-    final int[] varbits;
-    final int[] varps;
+    final int version = -1;
+    final int[] varbits = new int[0];
+    final int[] varps = new int[0];
 }
