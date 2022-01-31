@@ -107,6 +107,7 @@ public class WikiSyncPlugin extends Plugin
 		clientThread.invoke(() -> {
 			if (client.getIndexConfig() == null || client.getGameState().ordinal() < GameState.LOGIN_SCREEN.ordinal())
 			{
+				log.debug("Failed to get varbitComposition, state = {}", client.getGameState());
 				return false;
 			}
 			final int[] varbitIds = client.getIndexConfig().getFileIds(VARBITS_ARCHIVE_ID);
@@ -130,7 +131,7 @@ public class WikiSyncPlugin extends Plugin
 		{
 			return;
 		}
-		// TODO: find a way to put this somewhere better?
+
 		shortTimeoutClient = okHttpClient.newBuilder()
 			.callTimeout(3, TimeUnit.SECONDS)
 			.build();
@@ -142,7 +143,7 @@ public class WikiSyncPlugin extends Plugin
 
 		if (manifest == null || client.getLocalPlayer() == null)
 		{
-			// TODO: log something?
+			log.debug("Skipped due to bad manifest: {}", manifest);
 			return;
 		}
 
@@ -226,14 +227,14 @@ public class WikiSyncPlugin extends Plugin
 		{
 			if (!response.isSuccessful())
 			{
-				// TODO: log something?
+				log.debug("Failed to submit: {}", response.code());
 				return;
 			}
 			merge(playerDataMap.get(profileKey), delta);
 		}
-		catch (IOException ioException)
+		catch (IOException e)
 		{
-			// TODO: log something?
+			log.debug("Exception in submit: {}", e);
 		}
 	}
 
@@ -246,7 +247,7 @@ public class WikiSyncPlugin extends Plugin
 		{
 			if (!response.isSuccessful())
 			{
-				// TODO: log something?
+				log.debug("Failed to grab manifest: {}", response.code());
 				return;
 			}
 			InputStream in = response.body().byteStream();
@@ -254,7 +255,7 @@ public class WikiSyncPlugin extends Plugin
 		}
 		catch (IOException | JsonParseException e)
 		{
-			// TODO: log something?
+			log.debug("Exception in manifest: {}", e);
 		}
 	}
 }
