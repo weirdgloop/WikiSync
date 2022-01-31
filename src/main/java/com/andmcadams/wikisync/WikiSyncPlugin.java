@@ -105,7 +105,7 @@ public class WikiSyncPlugin extends Plugin
 	public void startUp()
 	{
 		clientThread.invoke(() -> {
-			if (client.getIndexConfig() == null)
+			if (client.getIndexConfig() == null || client.getGameState().ordinal() < GameState.LOGIN_SCREEN.ordinal())
 			{
 				return false;
 			}
@@ -126,7 +126,7 @@ public class WikiSyncPlugin extends Plugin
 	public void task()
 	{
 		// TODO: do we want other GameStates?
-		if (client.getGameState() != GameState.LOGGED_IN)
+		if (client.getGameState() != GameState.LOGGED_IN || varbitCompositions.isEmpty())
 		{
 			return;
 		}
@@ -140,27 +140,27 @@ public class WikiSyncPlugin extends Plugin
 			checkManifest();
 		}
 
-		if (manifest == null)
+		if (manifest == null || client.getLocalPlayer() == null)
 		{
 			// TODO: log something?
 			return;
 		}
 
 		grabCount++;
-		// TODO: check that this doesn't NPE?
 		String username = client.getLocalPlayer().getName();
 		RuneScapeProfileType profileType = RuneScapeProfileType.getCurrent(client);
 		PlayerProfile profileKey = new PlayerProfile(username, profileType);
 
 		PlayerData newPlayerData = getPlayerData();
-		PlayerData oldPlayerData = playerDataMap.getOrDefault(profileKey, new PlayerData());
+		playerDataMap.putIfAbsent(profileKey, new PlayerData());
+		PlayerData oldPlayerData = playerDataMap.get(profileKey);
 		if (newPlayerData.equals(oldPlayerData))
 		{
 			return;
 		}
 
-		PlayerData delta = diff(newPlayerData, oldPlayerData);
-		submitPlayerData(profileKey, delta, newPlayerData);
+		subtract(newPlayerData, oldPlayerData);
+		submitPlayerData(profileKey, newPlayerData);
 	}
 
 	private int getVarbitValue(int varbitId)
@@ -181,8 +181,6 @@ public class WikiSyncPlugin extends Plugin
 	private PlayerData getPlayerData()
 	{
 		PlayerData out = new PlayerData();
-
-		// IMPORTANT TODO: getVarbitValue must be run on client thread. This code hacks around that.
 		for (int varbitId : manifest.varbits)
 		{
 			out.varb.put(varbitId, getVarbitValue(varbitId));
@@ -198,16 +196,21 @@ public class WikiSyncPlugin extends Plugin
 		return out;
 	}
 
-	private PlayerData diff(PlayerData newPlayerData, PlayerData oldPlayerData)
+	private void subtract(PlayerData newPlayerData, PlayerData oldPlayerData)
 	{
-		return new PlayerData(
-				Maps.difference(newPlayerData.varb, oldPlayerData.varb).entriesOnlyOnLeft(),
-				Maps.difference(newPlayerData.varp, oldPlayerData.varp).entriesOnlyOnLeft(),
-				Maps.difference(newPlayerData.level, oldPlayerData.level).entriesOnlyOnLeft()
-		);
+		oldPlayerData.varb.forEach(newPlayerData.varb::remove);
+		oldPlayerData.varp.forEach(newPlayerData.varp::remove);
+		oldPlayerData.level.forEach(newPlayerData.level::remove);
 	}
 
-	private void submitPlayerData(PlayerProfile profileKey, PlayerData delta, PlayerData newPlayerData)
+	private void merge(PlayerData oldPlayerData, PlayerData delta)
+	{
+		oldPlayerData.varb.putAll(delta.varb);
+		oldPlayerData.varp.putAll(delta.varp);
+		oldPlayerData.level.putAll(delta.level);
+	}
+
+	private void submitPlayerData(PlayerProfile profileKey, PlayerData delta)
 	{
 		PlayerDataSubmission submission = new PlayerDataSubmission(
 				profileKey.getUsername(),
@@ -219,7 +222,6 @@ public class WikiSyncPlugin extends Plugin
 				.url(SUBMIT_URL)
 				.post(RequestBody.create(JSON, gson.toJson(submission)))
 				.build();
-
 		try (Response response = shortTimeoutClient.newCall(request).execute())
 		{
 			if (!response.isSuccessful())
@@ -227,8 +229,8 @@ public class WikiSyncPlugin extends Plugin
 				// TODO: log something?
 				return;
 			}
-			// TODO: if we have multiple periods, this needs to be merged into prior
-			playerDataMap.put(profileKey, newPlayerData);
+			System.out.println(delta);
+			merge(playerDataMap.get(profileKey), delta);
 		}
 		catch (IOException ioException)
 		{
