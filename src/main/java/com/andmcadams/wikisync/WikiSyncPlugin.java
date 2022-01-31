@@ -75,10 +75,8 @@ public class WikiSyncPlugin extends Plugin
 	@Inject
 	private OkHttpClient okHttpClient;
 
-	private OkHttpClient shortTimeoutClient;
-
 	private static final int SECONDS_BETWEEN_UPLOADS = 10;
-	private static final int UPLOADS_PER_MANIFEST_CHECK = 120;
+	private static final int SECONDS_BETWEEN_MANIFEST_CHECKS = 1200;
 
 	private static final String MANIFEST_URL = "https://sync.runescape.wiki/runelite/manifest";
 	private static final String SUBMIT_URL = "https://sync.runescape.wiki/runelite/submit";
@@ -92,7 +90,6 @@ public class WikiSyncPlugin extends Plugin
 	public static final int VERSION = 1;
 
 	private Manifest manifest;
-	private int grabCount = 0;
 	private Map<PlayerProfile, PlayerData> playerDataMap = new HashMap<>();
 
 	@Provides
@@ -117,6 +114,8 @@ public class WikiSyncPlugin extends Plugin
 			}
 			return true;
 		});
+
+		checkManifest();
 	}
 
 	@Schedule(
@@ -124,21 +123,12 @@ public class WikiSyncPlugin extends Plugin
 		unit = ChronoUnit.SECONDS,
 		asynchronous = true
 	)
-	public void task()
+	public void submitTask()
 	{
 		// TODO: do we want other GameStates?
 		if (client.getGameState() != GameState.LOGGED_IN || varbitCompositions.isEmpty())
 		{
 			return;
-		}
-
-		shortTimeoutClient = okHttpClient.newBuilder()
-			.callTimeout(3, TimeUnit.SECONDS)
-			.build();
-
-		if (grabCount % UPLOADS_PER_MANIFEST_CHECK == 0)
-		{
-			checkManifest();
 		}
 
 		if (manifest == null || client.getLocalPlayer() == null)
@@ -147,7 +137,6 @@ public class WikiSyncPlugin extends Plugin
 			return;
 		}
 
-		grabCount++;
 		String username = client.getLocalPlayer().getName();
 		RuneScapeProfileType profileType = RuneScapeProfileType.getCurrent(client);
 		PlayerProfile profileKey = new PlayerProfile(username, profileType);
@@ -163,6 +152,20 @@ public class WikiSyncPlugin extends Plugin
 		subtract(newPlayerData, oldPlayerData);
 		submitPlayerData(profileKey, newPlayerData);
 	}
+
+	@Schedule(
+			period = SECONDS_BETWEEN_MANIFEST_CHECKS,
+			unit = ChronoUnit.SECONDS,
+			asynchronous = true
+	)
+	public void manifestTask()
+	{
+		if (client.getGameState() == GameState.LOGGED_IN)
+		{
+			checkManifest();
+		}
+	}
+
 
 	private int getVarbitValue(int varbitId)
 	{
@@ -223,19 +226,28 @@ public class WikiSyncPlugin extends Plugin
 				.url(SUBMIT_URL)
 				.post(RequestBody.create(JSON, gson.toJson(submission)))
 				.build();
-		try (Response response = shortTimeoutClient.newCall(request).execute())
+
+		Call call = okHttpClient.newCall(request);
+		call.timeout().timeout(3, TimeUnit.SECONDS);
+		call.enqueue(new Callback()
 		{
-			if (!response.isSuccessful())
+			@Override
+			public void onFailure(Call call, IOException e)
 			{
-				log.debug("Failed to submit: {}", response.code());
-				return;
+				log.debug("Failed to submit: {}", e);
 			}
-			merge(playerDataMap.get(profileKey), delta);
-		}
-		catch (IOException e)
-		{
-			log.debug("Exception in submit: {}", e);
-		}
+
+			@Override
+			public void onResponse(Call call, Response response)
+			{
+				if (!response.isSuccessful())
+				{
+					log.debug("Failed to submit: {}", response.code());
+					return;
+				}
+				merge(playerDataMap.get(profileKey), delta);
+			}
+		});
 	}
 
 	private void checkManifest()
@@ -243,19 +255,32 @@ public class WikiSyncPlugin extends Plugin
 		Request request = new Request.Builder()
 				.url(MANIFEST_URL)
 				.build();
-		try (Response response = shortTimeoutClient.newCall(request).execute())
+		okHttpClient.newCall(request).enqueue(new Callback()
 		{
-			if (!response.isSuccessful())
+			@Override
+			public void onFailure(Call call, IOException e)
 			{
-				log.debug("Failed to grab manifest: {}", response.code());
-				return;
+				log.debug("Failed to get manifest: {}", e);
 			}
-			InputStream in = response.body().byteStream();
-			manifest = gson.fromJson(new InputStreamReader(in, StandardCharsets.UTF_8), Manifest.class);
-		}
-		catch (IOException | JsonParseException e)
-		{
-			log.debug("Exception in manifest: {}", e);
-		}
+
+			@Override
+			public void onResponse(Call call, Response response)
+			{
+				if (!response.isSuccessful())
+				{
+					log.debug("Failed to get manifest: {}", response.code());
+					return;
+				}
+				InputStream in = response.body().byteStream();
+				try
+				{
+					manifest = gson.fromJson(new InputStreamReader(in, StandardCharsets.UTF_8), Manifest.class);
+				}
+				catch (JsonParseException e)
+				{
+					response.close();
+				}
+			}
+		});
 	}
 }
