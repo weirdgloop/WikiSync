@@ -278,6 +278,10 @@ public class WikiSyncPlugin extends Plugin
 				}
 				catch (JsonParseException e)
 				{
+					log.debug("Failed to parse manifest: {}", e);
+				}
+				finally
+				{
 					response.close();
 				}
 			}
