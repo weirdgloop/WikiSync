@@ -240,12 +240,18 @@ public class WikiSyncPlugin extends Plugin
 			@Override
 			public void onResponse(Call call, Response response)
 			{
-				if (!response.isSuccessful())
+				try
 				{
-					log.debug("Failed to submit: {}", response.code());
-					return;
+					if (!response.isSuccessful()) {
+						log.debug("Failed to submit: {}", response.code());
+						return;
+					}
+					merge(playerDataMap.get(profileKey), delta);
 				}
-				merge(playerDataMap.get(profileKey), delta);
+				finally
+				{
+					response.close();
+				}
 			}
 		});
 	}
@@ -266,14 +272,14 @@ public class WikiSyncPlugin extends Plugin
 			@Override
 			public void onResponse(Call call, Response response)
 			{
-				if (!response.isSuccessful())
-				{
-					log.debug("Failed to get manifest: {}", response.code());
-					return;
-				}
-				InputStream in = response.body().byteStream();
 				try
 				{
+					if (!response.isSuccessful())
+					{
+						log.debug("Failed to get manifest: {}", response.code());
+						return;
+					}
+					InputStream in = response.body().byteStream();
 					manifest = gson.fromJson(new InputStreamReader(in, StandardCharsets.UTF_8), Manifest.class);
 				}
 				catch (JsonParseException e)
