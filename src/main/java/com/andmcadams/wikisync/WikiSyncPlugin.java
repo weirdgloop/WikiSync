@@ -229,7 +229,6 @@ public class WikiSyncPlugin extends Plugin
 				// TODO: log something?
 				return;
 			}
-			System.out.println(delta);
 			merge(playerDataMap.get(profileKey), delta);
 		}
 		catch (IOException ioException)
