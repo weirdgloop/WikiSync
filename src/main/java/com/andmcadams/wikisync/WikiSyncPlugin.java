@@ -142,8 +142,7 @@ public class WikiSyncPlugin extends Plugin
 		PlayerProfile profileKey = new PlayerProfile(username, profileType);
 
 		PlayerData newPlayerData = getPlayerData();
-		playerDataMap.putIfAbsent(profileKey, new PlayerData());
-		PlayerData oldPlayerData = playerDataMap.get(profileKey);
+		PlayerData oldPlayerData = playerDataMap.computeIfAbsent(profileKey, k -> new PlayerData());
 		if (newPlayerData.equals(oldPlayerData))
 		{
 			return;
