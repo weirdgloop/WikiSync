@@ -149,7 +149,7 @@ public class WikiSyncPlugin extends Plugin
 		}
 
 		subtract(newPlayerData, oldPlayerData);
-		submitPlayerData(profileKey, newPlayerData);
+		submitPlayerData(profileKey, newPlayerData, oldPlayerData);
 	}
 
 	@Schedule(
@@ -213,7 +213,7 @@ public class WikiSyncPlugin extends Plugin
 		oldPlayerData.level.putAll(delta.level);
 	}
 
-	private void submitPlayerData(PlayerProfile profileKey, PlayerData delta)
+	private void submitPlayerData(PlayerProfile profileKey, PlayerData delta, PlayerData old)
 	{
 		PlayerDataSubmission submission = new PlayerDataSubmission(
 				profileKey.getUsername(),
@@ -233,7 +233,7 @@ public class WikiSyncPlugin extends Plugin
 			@Override
 			public void onFailure(Call call, IOException e)
 			{
-				log.debug("Failed to submit: {}", e);
+				log.debug("Failed to submit: ", e);
 			}
 
 			@Override
@@ -245,7 +245,7 @@ public class WikiSyncPlugin extends Plugin
 						log.debug("Failed to submit: {}", response.code());
 						return;
 					}
-					merge(playerDataMap.get(profileKey), delta);
+					merge(old, delta);
 				}
 				finally
 				{
@@ -265,7 +265,7 @@ public class WikiSyncPlugin extends Plugin
 			@Override
 			public void onFailure(Call call, IOException e)
 			{
-				log.debug("Failed to get manifest: {}", e);
+				log.debug("Failed to get manifest: ", e);
 			}
 
 			@Override
@@ -283,7 +283,7 @@ public class WikiSyncPlugin extends Plugin
 				}
 				catch (JsonParseException e)
 				{
-					log.debug("Failed to parse manifest: {}", e);
+					log.debug("Failed to parse manifest: ", e);
 				}
 				finally
 				{
