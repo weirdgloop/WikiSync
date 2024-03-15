@@ -7,7 +7,7 @@ public class WikiSyncPluginTest
 {
 	public static void main(String[] args) throws Exception
 	{
-		ExternalPluginManager.loadBuiltin(WikiSyncPlugin.class);
+		ExternalPluginManager.loadBuiltin(WikiSyncPlugin.class, WikiSyncLogPlugin.class);
 		RuneLite.main(args);
 	}
 }
