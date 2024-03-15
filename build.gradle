@@ -21,7 +21,7 @@ dependencies {
 
     implementation "org.java-websocket:Java-WebSocket:1.5.6"
 
-	testImplementation 'junit:junit:4.12'
+	testImplementation 'junit:junit:4.13.2'
 	testImplementation group: 'net.runelite', name:'client', version: runeLiteVersion
 	testImplementation group: 'net.runelite', name:'jshell', version: runeLiteVersion
 

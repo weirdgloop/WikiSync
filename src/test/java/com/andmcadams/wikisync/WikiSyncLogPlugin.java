@@ -16,9 +16,6 @@ import org.slf4j.LoggerFactory;
 public class WikiSyncLogPlugin extends Plugin
 {
 
-	@Inject
-	private OverlayManager overlayManager;
-
 	@Override
 	protected void startUp()
 	{
@@ -27,7 +24,7 @@ public class WikiSyncLogPlugin extends Plugin
 	}
 
 	@Override
-	protected void shutDown() throws Exception
+	protected void shutDown()
 	{
 		((Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME)).setLevel(Level.DEBUG);
 	}

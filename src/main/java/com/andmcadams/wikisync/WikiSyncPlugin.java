@@ -26,7 +26,6 @@ package com.andmcadams.wikisync;
 
 import com.andmcadams.wikisync.dps.DpsDataFetcher;
 import com.andmcadams.wikisync.dps.WebSocketManager;
-import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.JsonParseException;
 import com.google.inject.Provides;
@@ -134,7 +133,7 @@ public class WikiSyncPlugin extends Plugin
 	}
 
 	@Override
-	protected void shutDown() throws Exception
+	protected void shutDown()
 	{
 		log.info("WikiSync stopped!");
 		webSocketManager.shutDown();
