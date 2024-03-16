@@ -8,6 +8,7 @@ import com.andmcadams.wikisync.dps.ws.WSWebsocketServer;
 import com.google.common.collect.ImmutableSet;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Objects;
@@ -168,7 +169,7 @@ public class WebSocketManager implements WSHandler
 				{
 					this.server.stop();
 				}
-				catch (InterruptedException e)
+				catch (InterruptedException | IOException e)
 				{
 					// ignored
 				}

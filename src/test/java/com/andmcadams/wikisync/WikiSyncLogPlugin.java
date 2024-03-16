@@ -1,12 +1,10 @@
 package com.andmcadams.wikisync;
 
 import ch.qos.logback.classic.Level;
-import javax.inject.Inject;
 import javax.inject.Singleton;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import ch.qos.logback.classic.Logger;
-import net.runelite.client.ui.overlay.OverlayManager;
 import org.slf4j.LoggerFactory;
 
 @Singleton
