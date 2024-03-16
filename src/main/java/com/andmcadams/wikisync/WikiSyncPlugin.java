@@ -24,7 +24,8 @@
  */
 package com.andmcadams.wikisync;
 
-import com.google.common.collect.Maps;
+import com.andmcadams.wikisync.dps.DpsDataFetcher;
+import com.andmcadams.wikisync.dps.WebSocketManager;
 import com.google.gson.Gson;
 import com.google.gson.JsonParseException;
 import com.google.inject.Provides;
@@ -36,6 +37,7 @@ import net.runelite.api.VarbitComposition;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.config.RuneScapeProfileType;
+import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.task.Schedule;
@@ -64,7 +66,16 @@ public class WikiSyncPlugin extends Plugin
 	private ClientThread clientThread;
 
 	@Inject
+	private EventBus eventBus;
+
+	@Inject
 	private ConfigManager configManager;
+
+	@Inject
+	private WebSocketManager webSocketManager;
+
+	@Inject
+	private DpsDataFetcher dpsDataFetcher;
 
 	@Inject
 	private WikiSyncConfig config;
@@ -116,6 +127,18 @@ public class WikiSyncPlugin extends Plugin
 		});
 
 		checkManifest();
+		webSocketManager.startUp();
+		eventBus.register(webSocketManager);
+		eventBus.register(dpsDataFetcher);
+	}
+
+	@Override
+	protected void shutDown()
+	{
+		log.info("WikiSync stopped!");
+		webSocketManager.shutDown();
+		eventBus.unregister(webSocketManager);
+		eventBus.unregister(dpsDataFetcher);
 	}
 
 	@Schedule(
@@ -291,5 +314,16 @@ public class WikiSyncPlugin extends Plugin
 				}
 			}
 		});
+	}
+
+	@Schedule(
+		period = 30,
+		unit = ChronoUnit.SECONDS,
+		asynchronous = true
+	)
+	public void scheduledEnsureDpsWsActive()
+	{
+		log.debug("ensuring active!!");
+		webSocketManager.ensureActive();
 	}
 }
