@@ -135,7 +135,7 @@ public class WikiSyncPlugin extends Plugin
 	@Override
 	protected void shutDown()
 	{
-		log.info("WikiSync stopped!");
+		log.debug("WikiSync stopped!");
 		webSocketManager.shutDown();
 		eventBus.unregister(webSocketManager);
 		eventBus.unregister(dpsDataFetcher);

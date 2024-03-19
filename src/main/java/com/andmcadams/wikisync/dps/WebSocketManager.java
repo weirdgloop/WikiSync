@@ -52,7 +52,7 @@ public class WebSocketManager implements WSHandler
 
 	public void shutDown()
 	{
-		log.info("Shutting down WikiSync Websocket Manager. Server active = {}", serverActive.getPlain());
+		log.debug("Shutting down WikiSync Websocket Manager. Server active = {}", serverActive.getPlain());
 		stopServer();
 	}
 
@@ -90,7 +90,7 @@ public class WebSocketManager implements WSHandler
 		// unauthorized access from any major browser.
 		String requestPath = conn.getResourceDescriptor();
 		String origin = handshake.getFieldValue("origin");
-		log.info("Received new WebSocket request. requestPath: {}, origin: {}", requestPath, origin);
+		log.debug("Received new WebSocket request. requestPath: {}, origin: {}", requestPath, origin);
 		if (!Objects.equals(requestPath, "/")) {
 			log.error("Unknown requestPath: {}", requestPath);
 			conn.close();
@@ -127,7 +127,7 @@ public class WebSocketManager implements WSHandler
 				conn.send(gson.toJson(new GetPlayer(request.getSequenceId(), payload)));
 				break;
 			default:
-				log.info("Got request with no handler.");
+				log.debug("Got request with no handler.");
 				break;
 		}
 	}
@@ -156,7 +156,7 @@ public class WebSocketManager implements WSHandler
 	@Override
 	public void onStart()
 	{
-		log.info("Started! Port: {}", server.getPort());
+		log.debug("Started! Port: {}", server.getPort());
 	}
 
 	private void stopServer()
