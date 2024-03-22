@@ -32,6 +32,7 @@ import net.runelite.client.config.ConfigItem;
 public interface WikiSyncConfig extends Config
 {
 	String WIKISYNC_VERSION_KEYNAME = "version";
+	String ENABLE_LOCAL_WEB_SOCKET_SERVER_KEYNAME = "enableLocalWebSocketServer";
 
 	@ConfigItem(keyName = WIKISYNC_VERSION_KEYNAME, name = "Version", description = "The last version of WikiSync used by the player", hidden = true)
 	default int wikiSyncVersion()
@@ -39,7 +40,12 @@ public interface WikiSyncConfig extends Config
 		return WikiSyncPlugin.VERSION;
 	}
 
-	/** New toggle defaults should be true, they will be toggled to false in WikiSyncPlugin.setTogglesBasedOnVersion
-		depending on deployment number.
-	 */
+
+	@ConfigItem(keyName = ENABLE_LOCAL_WEB_SOCKET_SERVER_KEYNAME,
+		name = "Enable local WebSocket server",
+		description = "If enabled, a WebSocket server will be served on localhost to be used by the OSRS DPS calculator (and other tools in the future!).")
+	default boolean enableLocalWebSocketServer()
+	{
+		return true;
+	}
 }

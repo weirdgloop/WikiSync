@@ -38,6 +38,8 @@ import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.config.RuneScapeProfileType;
 import net.runelite.client.eventbus.EventBus;
+import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.task.Schedule;
@@ -102,6 +104,7 @@ public class WikiSyncPlugin extends Plugin
 
 	private Manifest manifest;
 	private Map<PlayerProfile, PlayerData> playerDataMap = new HashMap<>();
+	private boolean webSocketStarted;
 
 	@Provides
 	WikiSyncConfig getConfig(ConfigManager configManager)
@@ -127,18 +130,45 @@ public class WikiSyncPlugin extends Plugin
 		});
 
 		checkManifest();
+		if (config.enableLocalWebSocketServer()) {
+			startUpWebSocketManager();
+		}
+	}
+
+	private void startUpWebSocketManager()
+	{
 		webSocketManager.startUp();
 		eventBus.register(webSocketManager);
 		eventBus.register(dpsDataFetcher);
+		webSocketStarted = true;
 	}
 
 	@Override
 	protected void shutDown()
 	{
 		log.debug("WikiSync stopped!");
+		shutDownWebSocketManager();
+	}
+
+	private void shutDownWebSocketManager()
+	{
 		webSocketManager.shutDown();
 		eventBus.unregister(webSocketManager);
 		eventBus.unregister(dpsDataFetcher);
+		webSocketStarted = false;
+	}
+
+	@Subscribe
+	public void onConfigChanged(ConfigChanged e) {
+		if (e.getGroup().equals(CONFIG_GROUP_KEY)){
+			if (config.enableLocalWebSocketServer() != webSocketStarted) {
+				if (config.enableLocalWebSocketServer()) {
+					startUpWebSocketManager();
+				} else {
+					shutDownWebSocketManager();
+				}
+			}
+		}
 	}
 
 	@Schedule(
@@ -324,6 +354,9 @@ public class WikiSyncPlugin extends Plugin
 	public void scheduledEnsureDpsWsActive()
 	{
 		log.debug("ensuring active!!");
-		webSocketManager.ensureActive();
+		if (webSocketStarted)
+		{
+			webSocketManager.ensureActive();
+		}
 	}
 }
