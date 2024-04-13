@@ -12,11 +12,14 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.client.callback.ClientThread;
 import net.runelite.client.eventbus.Subscribe;
 import org.java_websocket.WebSocket;
 import org.java_websocket.handshake.ClientHandshake;
@@ -40,6 +43,11 @@ public class WebSocketManager implements WSHandler
 	private int nextPort;
 
 	private WSWebsocketServer server;
+
+	@Inject
+	private ClientThread clientThread;
+
+	private static final ExecutorService executorService = Executors.newSingleThreadExecutor();
 
 	public void startUp()
 	{
@@ -78,7 +86,9 @@ public class WebSocketManager implements WSHandler
 	{
 		if (serverActive.get())
 		{
-			this.server.broadcast(gson.toJson(e));
+			executorService.submit(()->{
+				this.server.broadcast(gson.toJson(e));
+			});
 		}
 	}
 
@@ -122,8 +132,12 @@ public class WebSocketManager implements WSHandler
 		Request request = gson.fromJson(message, Request.class);
 		switch (request.get_wsType()) {
 			case GetPlayer:
-				JsonObject payload = dpsDataFetcher.getLoadout();
-				conn.send(gson.toJson(new GetPlayer(request.getSequenceId(), payload)));
+				clientThread.invokeLater(() -> {
+					JsonObject payload = dpsDataFetcher.buildShortlinkData();
+					executorService.submit(()->{
+						conn.send(gson.toJson(new GetPlayer(request.getSequenceId(), payload)));
+					});
+				});
 				break;
 			default:
 				log.debug("Got request with no handler.");

@@ -38,15 +38,10 @@ public class DpsDataFetcher
 	@Getter
 	private String username;
 
-	// TODO: Delete this once the Wiki plugin service exists. See https://github.com/runelite/runelite/pull/17524
-	@Getter
-	private JsonObject loadout;
-
 	@Subscribe
 	public void onGameTick(GameTick e)
 	{
 		checkUsername();
-		checkLoadout();
 	}
 
 	@Subscribe
@@ -104,7 +99,7 @@ public class DpsDataFetcher
 
 	// TODO: Delete this once the Wiki plugin service exists. See https://github.com/runelite/runelite/pull/17524
 	// This is directly copied from https://github.com/runelite/runelite/pull/17524/files#diff-141a15aba5d017de9818b5d39722f85f95b330ef96f8eb06103a947c1094b905
-	private JsonObject buildShortlinkData()
+	public JsonObject buildShortlinkData()
 	{
 		JsonObject j = new JsonObject();
 
@@ -152,17 +147,6 @@ public class DpsDataFetcher
 		j.add("loadouts", loadouts);
 
 		return j;
-	}
-
-	private void checkLoadout()
-	{
-		JsonObject currentLoadout = buildShortlinkData();
-
-		if (!Objects.equals(this.loadout, currentLoadout))
-		{
-			log.debug("WS loadout changed prev=[{}] next=[{}]", this.loadout, currentLoadout);
-			this.loadout = currentLoadout;
-		}
 	}
 
 }
