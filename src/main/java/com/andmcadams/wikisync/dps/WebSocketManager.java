@@ -14,6 +14,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -47,7 +48,11 @@ public class WebSocketManager implements WSHandler
 	@Inject
 	private ClientThread clientThread;
 
-	private static final ExecutorService executorService = Executors.newSingleThreadExecutor();
+	private static final ExecutorService executorService = Executors.newSingleThreadExecutor(r -> {
+		Thread t = new Thread(r);
+		t.setDaemon(true);
+		return t;
+	});
 
 	public void startUp()
 	{
