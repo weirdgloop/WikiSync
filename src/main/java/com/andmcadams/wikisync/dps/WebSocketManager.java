@@ -6,6 +6,7 @@ import com.andmcadams.wikisync.dps.messages.response.UsernameChanged;
 import com.andmcadams.wikisync.dps.ws.WSHandler;
 import com.andmcadams.wikisync.dps.ws.WSWebsocketServer;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import java.net.URI;
@@ -14,7 +15,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -48,11 +48,7 @@ public class WebSocketManager implements WSHandler
 	@Inject
 	private ClientThread clientThread;
 
-	private static final ExecutorService executorService = Executors.newSingleThreadExecutor(r -> {
-		Thread t = new Thread(r);
-		t.setDaemon(true);
-		return t;
-	});
+	private static final ExecutorService executorService = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setDaemon(true).setNameFormat("wikisync-dps-manager-%d").build());
 
 	public void startUp()
 	{

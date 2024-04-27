@@ -12,7 +12,7 @@ public class WSWebsocketServer extends WebSocketServer
 
 	public WSWebsocketServer(int port, WSHandler handler)
 	{
-		super(new InetSocketAddress("127.0.0.1", port));
+		super(new InetSocketAddress("127.0.0.1", port), 1);
 		this.setDaemon(true);
 		this.handler = handler;
 	}
