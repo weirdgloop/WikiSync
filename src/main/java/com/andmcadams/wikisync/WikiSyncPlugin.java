@@ -200,7 +200,9 @@ public class WikiSyncPlugin extends Plugin
 		// Subtraction is done in place so newPlayerData becomes a map of only changed fields
 		subtract(newPlayerData, oldPlayerData);
 		if (newPlayerData.isEmpty())
+		{
 			return;
+		}
 		submitPlayerData(profileKey, newPlayerData, oldPlayerData);
 	}
 

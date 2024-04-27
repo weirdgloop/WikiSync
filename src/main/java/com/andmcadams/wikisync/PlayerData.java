@@ -17,7 +17,8 @@ public class PlayerData
     Map<Integer, Integer> varp = new HashMap<>();
     Map<String, Integer> level = new HashMap<>();
 
-	public boolean isEmpty() {
+	public boolean isEmpty()
+	{
 		return varb.isEmpty() && varp.isEmpty() && level.isEmpty();
 	}
 }
