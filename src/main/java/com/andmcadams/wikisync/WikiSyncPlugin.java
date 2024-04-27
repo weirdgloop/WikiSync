@@ -196,12 +196,11 @@ public class WikiSyncPlugin extends Plugin
 
 		PlayerData newPlayerData = getPlayerData();
 		PlayerData oldPlayerData = playerDataMap.computeIfAbsent(profileKey, k -> new PlayerData());
-		if (newPlayerData.equals(oldPlayerData))
-		{
-			return;
-		}
 
+		// Subtraction is done in place so newPlayerData becomes a map of only changed fields
 		subtract(newPlayerData, oldPlayerData);
+		if (newPlayerData.isEmpty())
+			return;
 		submitPlayerData(profileKey, newPlayerData, oldPlayerData);
 	}
 
