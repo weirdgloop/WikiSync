@@ -48,7 +48,7 @@ public class WebSocketManager implements WSHandler
 	@Inject
 	private ClientThread clientThread;
 
-	private static final ExecutorService executorService = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setDaemon(true).setNameFormat("wikisync-dps-thread-%d").build());
+	private static final ExecutorService executorService = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setDaemon(true).setNameFormat("wikisync-dps-manager-%d").build());
 
 	public void startUp()
 	{
