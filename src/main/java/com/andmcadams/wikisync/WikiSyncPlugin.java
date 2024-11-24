@@ -105,6 +105,7 @@ public class WikiSyncPlugin extends Plugin
 	private Manifest manifest;
 	private Map<PlayerProfile, PlayerData> playerDataMap = new HashMap<>();
 	private boolean webSocketStarted;
+	private int cyclesSinceSuccessfulCall = 0;
 
 	@Provides
 	WikiSyncConfig getConfig(ConfigManager configManager)
@@ -269,6 +270,14 @@ public class WikiSyncPlugin extends Plugin
 
 	private void submitPlayerData(PlayerProfile profileKey, PlayerData delta, PlayerData old)
 	{
+		// If cyclesSinceSuccessfulCall is not a perfect square, we should not try to submit.
+		// This gives us quadratic backoff.
+		cyclesSinceSuccessfulCall += 1;
+		if (Math.pow((int) Math.sqrt(cyclesSinceSuccessfulCall), 2) != cyclesSinceSuccessfulCall)
+		{
+			return;
+		}
+
 		PlayerDataSubmission submission = new PlayerDataSubmission(
 				profileKey.getUsername(),
 				profileKey.getProfileType().name(),
@@ -300,6 +309,7 @@ public class WikiSyncPlugin extends Plugin
 						return;
 					}
 					merge(old, delta);
+					cyclesSinceSuccessfulCall = 0;
 				}
 				finally
 				{

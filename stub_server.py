@@ -39,8 +39,9 @@ def create_app():
 
 
 if __name__ == '__main__':
-    with make_server('', 8000, create_app()) as httpd:
-        print(f'Serving on port 8000...')
+    port = 8484
+    with make_server('', port, create_app()) as httpd:
+        print(f'Serving on port {port}...')
 
         # Serve until process is killed
         httpd.serve_forever()
