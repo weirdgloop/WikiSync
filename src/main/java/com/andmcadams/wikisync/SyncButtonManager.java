@@ -74,17 +74,6 @@ public class SyncButtonManager {
         clientThread.invokeLater(this::removeButton);
     }
 
-//    @Subscribe
-//    public void onMenuOptionClicked(MenuOptionClicked m) {
-//        log.error("opt {}", m.getMenuOption());
-//        log.error("action {}", m.getMenuAction().toString());
-//        log.error("p0 {}", m.getParam0());
-//        log.error("p1 {}", m.getParam1());
-//        log.error("id {}", m.getId());
-//        log.error("itemId {}", m.getItemId());
-//        log.error("target {}", m.getMenuTarget());
-//    }
-
     @Getter
     @RequiredArgsConstructor
     enum Screen
@@ -93,26 +82,16 @@ public class SyncButtonManager {
         COLLECTION_LOG(40697944, 40697932, ComponentID.COLLECTION_LOG_CONTAINER, 55),
         ;
 
-        /**
-         * parent widget of the interface, install target
-         */
         @Getter(onMethod_ = @Component)
         private final int parentId;
 
-        /**
-         * the "Set Bonus" button widget layer
-         */
         @Getter(onMethod_ = @Component)
         private final int searchButtonId;
 
         @Getter(onMethod_ = @Component)
         private final int collectionLogContainer;
 
-        /**
-         * OriginalX for Set Bonus and Stat Bonus, prior to us moving them around (for shutdown)
-         **/
         private final int originalX;
-
     }
 
     void tryAddButton(Runnable onClick)
@@ -137,10 +116,6 @@ public class SyncButtonManager {
         client.addChatMessage(ChatMessageType.CONSOLE, "WikiSync", "Your collection log data is being sent to WikiSync...", "WikiSync");
     }
 
-    /**
-     * Shifts over the Set Bonus / Stat Bonus buttons
-     * and adds new widgets to make a visually equal button with a different name.
-     */
     void addButton(Screen screen, Runnable onClick)
     {
         Widget parent = client.getWidget(screen.getParentId());
@@ -157,9 +132,6 @@ public class SyncButtonManager {
             return;
         }
 
-        // Since the Set Bonus button uses absolute positioning,
-        // we must also use absolute for all the children below,
-        // which means it's necessary to offset the values by simulating corresponding pos/size modes.
         final int w = setBonus.getOriginalWidth();
         final int h = setBonus.getOriginalHeight();
         final int x = parent.getOriginalWidth() - 103;
@@ -167,7 +139,6 @@ public class SyncButtonManager {
 
         final Widget[] spriteWidgets = new Widget[9];
 
-        // the background uses ABSOLUTE_CENTER and MINUS sizing
         int bgWidth = w - refComponents[0].getOriginalWidth();
         int bgHeight = h - refComponents[0].getOriginalHeight();
         int bgX = (x) + (w - bgWidth) / 2;
