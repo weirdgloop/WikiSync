@@ -113,6 +113,7 @@ public class SyncButtonManager {
 
     void onButtonClick() {
         client.menuAction(-1, 40697932, MenuAction.CC_OP, 1, -1, "Search", null);
+        client.menuAction(-1, 40697932, MenuAction.CC_OP, 1, -1, "Back", null);
         client.addChatMessage(ChatMessageType.CONSOLE, "WikiSync", "Your collection log data is being sent to WikiSync...", "WikiSync");
     }
 
@@ -150,7 +151,6 @@ public class SyncButtonManager {
                 .setYPositionMode(setBonus.getYPositionMode());
         spriteWidgets[0].revalidate();
 
-        // borders and corners
         for (int i = 1; i < 9; i++)
         {
             Widget c = spriteWidgets[i] = parent.createChild(-1, WidgetType.GRAPHIC)

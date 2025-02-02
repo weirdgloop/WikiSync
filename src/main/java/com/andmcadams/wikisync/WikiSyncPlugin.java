@@ -201,7 +201,6 @@ public class WikiSyncPlugin extends Plugin
 	private int lookupItemIndex(int itemId) {
         // The map has not loaded yet, or failed to load.
 		if (collectionsMap.isEmpty()) {
-            log.error("Manifest has no collections data");
 			return -1;
 		}
 		Integer result = collectionsMap.get(itemId);
@@ -229,6 +228,12 @@ public class WikiSyncPlugin extends Plugin
 	@Subscribe
 	public void onScriptPreFired(ScriptPreFired preFired) {
 		if (preFired.getScriptId() == 4100) {
+			if (collectionsMap.isEmpty())
+			{
+				log.error("Manifest has no collections data");
+				return;
+			}
+
 			Object[] args = preFired.getScriptEvent().getArguments();
 			int itemId = (int) args[1];
 			int idx = lookupItemIndex(itemId);
