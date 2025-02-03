@@ -6,12 +6,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.*;
 import net.runelite.api.annotations.Component;
-import net.runelite.api.events.MenuOptionClicked;
 import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.widgets.*;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.eventbus.EventBus;
-import net.runelite.api.events.ScriptPreFired;
 import net.runelite.api.widgets.ComponentID;
 import net.runelite.client.eventbus.Subscribe;
 
@@ -45,6 +43,9 @@ public class SyncButtonManager {
 
     private static final int FONT_COLOUR_INACTIVE = 0xd6d6d6;
     private static final int FONT_COLOUR_ACTIVE = 0xffffff;
+    private static final int CLOSE_BUTTON_OFFSET = 28;
+    private static final int BUTTON_WIDTH = 71;
+    private static final int BUTTON_OFFSET = CLOSE_BUTTON_OFFSET + 5;
 
     private final Client client;
     private final ClientThread clientThread;
@@ -79,7 +80,7 @@ public class SyncButtonManager {
     enum Screen
     {
         // First number is col log container (inner) and second is search button id
-        COLLECTION_LOG(40697944, 40697932, ComponentID.COLLECTION_LOG_CONTAINER, 55),
+        COLLECTION_LOG(40697944, 40697932, ComponentID.COLLECTION_LOG_CONTAINER),
         ;
 
         @Getter(onMethod_ = @Component)
@@ -90,8 +91,6 @@ public class SyncButtonManager {
 
         @Getter(onMethod_ = @Component)
         private final int collectionLogContainer;
-
-        private final int originalX;
     }
 
     void tryAddButton(Runnable onClick)
@@ -120,56 +119,95 @@ public class SyncButtonManager {
     void addButton(Screen screen, Runnable onClick)
     {
         Widget parent = client.getWidget(screen.getParentId());
-        Widget setBonus = client.getWidget(screen.getSearchButtonId());
+        Widget searchButton = client.getWidget(screen.getSearchButtonId());
         Widget collectionLogContainer = client.getWidget(screen.getCollectionLogContainer());
         Widget[] containerChildren;
         Widget draggableTopbar;
-        Widget[] refComponents;
-        if (parent == null || setBonus == null || collectionLogContainer == null ||
+        if (parent == null || searchButton == null || collectionLogContainer == null ||
             (containerChildren = collectionLogContainer.getChildren()) == null ||
-                (draggableTopbar = containerChildren[0]) == null  ||
-                (refComponents = setBonus.getChildren()) == null)
+                (draggableTopbar = containerChildren[0]) == null)
         {
             return;
         }
 
-        final int w = setBonus.getOriginalWidth();
-        final int h = setBonus.getOriginalHeight();
-        final int x = parent.getOriginalWidth() - 103;
-        final int y = setBonus.getOriginalY();
+        final int w = BUTTON_WIDTH;
+        final int h = searchButton.getOriginalHeight();
+        final int x = BUTTON_OFFSET;
+        final int y = searchButton.getOriginalY();
+        final int cornerDim = 9;
 
         final Widget[] spriteWidgets = new Widget[9];
 
-        int bgWidth = w - refComponents[0].getOriginalWidth();
-        int bgHeight = h - refComponents[0].getOriginalHeight();
-        int bgX = (x) + (w - bgWidth) / 2;
-        int bgY = (y) + (h - bgHeight) / 2;
         spriteWidgets[0] = parent.createChild(-1, WidgetType.GRAPHIC)
-                .setSpriteId(refComponents[0].getSpriteId())
-                .setPos(bgX, bgY)
-                .setSize(bgWidth, bgHeight)
-                .setYPositionMode(setBonus.getYPositionMode());
-        spriteWidgets[0].revalidate();
+                .setSpriteId(SPRITE_IDS_INACTIVE[0])
+                .setPos(x, y)
+                .setSize(w, h)
+                .setXPositionMode(WidgetPositionMode.ABSOLUTE_RIGHT)
+                .setYPositionMode(searchButton.getYPositionMode());
 
-        for (int i = 1; i < 9; i++)
+        spriteWidgets[1] = parent.createChild(-1, WidgetType.GRAPHIC)
+                .setSpriteId(SPRITE_IDS_INACTIVE[1])
+                .setXPositionMode(WidgetPositionMode.ABSOLUTE_RIGHT)
+                .setSize(cornerDim, cornerDim)
+                .setPos(x + (w - cornerDim), y);
+        spriteWidgets[2] = parent.createChild(-1, WidgetType.GRAPHIC)
+                .setSpriteId(SPRITE_IDS_INACTIVE[2])
+                .setXPositionMode(WidgetPositionMode.ABSOLUTE_RIGHT)
+                .setSize(cornerDim, cornerDim)
+                .setPos(x, y);
+        spriteWidgets[3] = parent.createChild(-1, WidgetType.GRAPHIC)
+                .setSpriteId(SPRITE_IDS_INACTIVE[3])
+                .setXPositionMode(WidgetPositionMode.ABSOLUTE_RIGHT)
+                .setSize(cornerDim, cornerDim)
+                .setPos(x + (w - cornerDim), y + h - cornerDim);
+        spriteWidgets[4] = parent.createChild(-1, WidgetType.GRAPHIC)
+                .setSpriteId(SPRITE_IDS_INACTIVE[4])
+                .setXPositionMode(WidgetPositionMode.ABSOLUTE_RIGHT)
+                .setSize(cornerDim, cornerDim)
+                .setPos(x, y + h - cornerDim);
+        // Left and right edges
+        int sideWidth = 9;
+        int sideHeight = 4;
+        spriteWidgets[5] = parent.createChild(-1, WidgetType.GRAPHIC)
+                .setSpriteId(SPRITE_IDS_INACTIVE[5])
+                .setXPositionMode(WidgetPositionMode.ABSOLUTE_RIGHT)
+                .setSize(sideWidth, sideHeight)
+                .setPos(x + (w - sideWidth), y + cornerDim);
+        spriteWidgets[7] = parent.createChild(-1, WidgetType.GRAPHIC)
+                .setSpriteId(SPRITE_IDS_INACTIVE[7])
+                .setXPositionMode(WidgetPositionMode.ABSOLUTE_RIGHT)
+                .setSize(sideWidth, sideHeight)
+                .setPos(x, y + cornerDim);
+
+        // Top and bottom edges
+        int topWidth = 53;
+        int topHeight = 9;
+        spriteWidgets[6] = parent.createChild(-1, WidgetType.GRAPHIC)
+                .setSpriteId(SPRITE_IDS_INACTIVE[6])
+                .setXPositionMode(WidgetPositionMode.ABSOLUTE_RIGHT)
+                .setSize(topWidth, topHeight)
+                .setPos(x + cornerDim, y);
+        spriteWidgets[8] = parent.createChild(-1, WidgetType.GRAPHIC)
+                .setSpriteId(SPRITE_IDS_INACTIVE[8])
+                .setXPositionMode(WidgetPositionMode.ABSOLUTE_RIGHT)
+                .setSize(topWidth, topHeight)
+                .setPos(x + cornerDim, y + h - topHeight);
+        for (int i = 0; i < 9; i++)
         {
-            Widget c = spriteWidgets[i] = parent.createChild(-1, WidgetType.GRAPHIC)
-                    .setSpriteId(refComponents[i].getSpriteId())
-                    .setSize(refComponents[i].getOriginalWidth(), refComponents[i].getOriginalHeight())
-                    .setPos(x + refComponents[i].getOriginalX(), y + refComponents[i].getOriginalY());
             spriteWidgets[i].revalidate();
         }
 
         final Widget text = parent.createChild(-1, WidgetType.TEXT)
                 .setText("WikiSync")
                 .setTextColor(FONT_COLOUR_INACTIVE)
-                .setFontId(refComponents[10].getFontId())
-                .setTextShadowed(refComponents[10].getTextShadowed())
+                .setFontId(FontID.PLAIN_11)
+                .setTextShadowed(true)
+                .setXPositionMode(WidgetPositionMode.ABSOLUTE_RIGHT)
                 .setXTextAlignment(WidgetTextAlignment.CENTER)
                 .setYTextAlignment(WidgetTextAlignment.CENTER)
                 .setPos(x, y)
                 .setSize(w, h)
-                .setYPositionMode(setBonus.getYPositionMode());
+                .setYPositionMode(searchButton.getYPositionMode());
         text.revalidate();
 
         // We'll give the text layer the listeners since it covers the whole area
@@ -191,13 +229,13 @@ public class SyncButtonManager {
             text.setTextColor(FONT_COLOUR_INACTIVE);
         });
 
-        // register a click listener
+        // Register a click listener
         text.setAction(0, "Sync your collection log with WikiSync");
         text.setOnOpListener((JavaScriptCallback) ev -> onClick.run());
 
 
-        //Shrink the top bar to avoid overlapping the new button
-        draggableTopbar.setOriginalWidth(draggableTopbar.getWidth() - w);
+        // Shrink the top bar to avoid overlapping the new button
+        draggableTopbar.setOriginalWidth(draggableTopbar.getOriginalWidth() - (w + (x - CLOSE_BUTTON_OFFSET)));
         draggableTopbar.revalidate();
 
         // recompute locations / sizes on parent
