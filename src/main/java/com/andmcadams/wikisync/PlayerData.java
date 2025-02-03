@@ -1,11 +1,9 @@
 package com.andmcadams.wikisync;
 
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.BitSet;
 import java.util.HashMap;
 import java.util.Map;
 
