@@ -92,10 +92,8 @@ public class WikiSyncPlugin extends Plugin
 	private static final int SECONDS_BETWEEN_UPLOADS = 10;
 	private static final int SECONDS_BETWEEN_MANIFEST_CHECKS = 1200;
 
-//	private static final String MANIFEST_URL = "https://sync.runescape.wiki/runelite/manifest";
-//	private static final String SUBMIT_URL = "https://sync.runescape.wiki/runelite/submit";
-	private static final String MANIFEST_URL = "http://localhost:3000/runelite/manifest";
-	private static final String SUBMIT_URL = "http://localhost:3000/runelite/submit";
+	private static final String MANIFEST_URL = "https://sync.runescape.wiki/runelite/manifest";
+	private static final String SUBMIT_URL = "https://sync.runescape.wiki/runelite/submit";
 	private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
 
 	private static final int VARBITS_ARCHIVE_ID = 14;
@@ -123,6 +121,7 @@ public class WikiSyncPlugin extends Plugin
 	@Override
 	public void startUp()
 	{
+		clogItemsBitSet.clear();
 		clientThread.invoke(() -> {
 			if (client.getIndexConfig() == null || client.getGameState().ordinal() < GameState.LOGIN_SCREEN.ordinal())
 			{
@@ -181,6 +180,7 @@ public class WikiSyncPlugin extends Plugin
 	protected void shutDown()
 	{
 		log.debug("WikiSync stopped!");
+		clogItemsBitSet.clear();
 		shutDownWebSocketManager();
 		syncButtonManager.shutDown();
 	}
@@ -377,7 +377,6 @@ public class WikiSyncPlugin extends Plugin
 				.post(RequestBody.create(JSON, gson.toJson(submission)))
 				.build();
 
-		log.error(delta.collectionLog);
 		Call call = okHttpClient.newCall(request);
 		call.timeout().timeout(3, TimeUnit.SECONDS);
 		call.enqueue(new Callback()
