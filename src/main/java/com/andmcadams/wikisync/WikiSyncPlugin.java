@@ -113,13 +113,13 @@ public class WikiSyncPlugin extends Plugin
 	private boolean webSocketStarted;
 	private int cyclesSinceSuccessfulCall = 0;
 
-    // Keeps track of what collection log slots the user has set.
-    private static final BitSet clogItemsBitSet = new BitSet();
+	// Keeps track of what collection log slots the user has set.
+	private static final BitSet clogItemsBitSet = new BitSet();
 	// Map item ids to bit index in the bitset
-    private static final HashMap<Integer, Integer> collectionsMap = new HashMap<>();
+	private static final HashMap<Integer, Integer> collectionsMap = new HashMap<>();
 	private boolean collectionLogScriptFired = false;
 
-    @Provides
+	@Provides
 	WikiSyncConfig getConfig(ConfigManager configManager)
 	{
 		return configManager.getConfig(WikiSyncConfig.class);
@@ -150,20 +150,20 @@ public class WikiSyncPlugin extends Plugin
 		syncButtonManager.startUp();
 	}
 
-    private HashSet<Integer> parseCacheForClog()
-    {
-        HashSet<Integer> itemIds = new HashSet<>();
-        int[] topLevelStructs = client.getEnum(2102).getIntVals();
-        for (int topLevelStructIndex : topLevelStructs)
-        {
-            StructComposition s = client.getStructComposition(topLevelStructIndex);
-            int[] substructIndices = client.getEnum(s.getIntValue(683)).getIntVals();
-            for (int substructIndex : substructIndices) {
-                StructComposition s2 = client.getStructComposition(substructIndex);
-                int[] clogItems = client.getEnum(s2.getIntValue(690)).getIntVals();
-                for (int clogItemId : clogItems) itemIds.add(clogItemId);
-            }
-        }
+	private HashSet<Integer> parseCacheForClog()
+	{
+		HashSet<Integer> itemIds = new HashSet<>();
+		int[] topLevelStructs = client.getEnum(2102).getIntVals();
+		for (int topLevelStructIndex : topLevelStructs)
+		{
+			StructComposition s = client.getStructComposition(topLevelStructIndex);
+			int[] substructIndices = client.getEnum(s.getIntValue(683)).getIntVals();
+			for (int substructIndex : substructIndices) {
+				StructComposition s2 = client.getStructComposition(substructIndex);
+				int[] clogItems = client.getEnum(s2.getIntValue(690)).getIntVals();
+				for (int clogItemId : clogItems) itemIds.add(clogItemId);
+			}
+		}
 
 		// Some items with data saved on them have replacements to fix a duping issue
 		EnumComposition replacements = client.getEnum(3721);
@@ -172,8 +172,8 @@ public class WikiSyncPlugin extends Plugin
 		for (int goodItemId : replacements.getIntVals())
 			itemIds.add(goodItemId);
 
-        return itemIds;
-    }
+		return itemIds;
+	}
 
 	private void startUpWebSocketManager()
 	{
@@ -200,27 +200,27 @@ public class WikiSyncPlugin extends Plugin
 		webSocketStarted = false;
 	}
 
-    /**
-     * Finds the index this itemId is assigned to in the collections mapping.
-     * @param itemId: The itemId to look up
-     * @return The index of the bit that represents the given itemId, if it is in the map. -1 otherwise.
-     */
+	/**
+	 * Finds the index this itemId is assigned to in the collections mapping.
+	 * @param itemId: The itemId to look up
+	 * @return The index of the bit that represents the given itemId, if it is in the map. -1 otherwise.
+	 */
 	private int lookupItemIndex(int itemId) {
-        // The map has not loaded yet, or failed to load.
+		// The map has not loaded yet, or failed to load.
 		if (collectionsMap.isEmpty()) {
 			return -1;
 		}
 		Integer result = collectionsMap.get(itemId);
 		if (result == null) {
-            log.error("Item id {} not found in the mapping of items", itemId);
-            return -1;
-        }
+			log.error("Item id {} not found in the mapping of items", itemId);
+			return -1;
+		}
 		return result;
 	}
 
-    @Subscribe
-    public void onGameStateChanged(GameStateChanged event)
-    {
+	@Subscribe
+	public void onGameStateChanged(GameStateChanged event)
+	{
 		switch (event.getGameState())
 		{
 			// When hopping, we need to clear any state related to the player
@@ -230,7 +230,7 @@ public class WikiSyncPlugin extends Plugin
 				clogItemsBitSet.clear();
 				break;
 		}
-    }
+	}
 
 	@Subscribe
 	public void onScriptPreFired(ScriptPreFired preFired) {
@@ -245,9 +245,9 @@ public class WikiSyncPlugin extends Plugin
 			Object[] args = preFired.getScriptEvent().getArguments();
 			int itemId = (int) args[1];
 			int idx = lookupItemIndex(itemId);
-            // We should never return -1 under normal circumstances
+			// We should never return -1 under normal circumstances
 			if (idx != -1)
-                clogItemsBitSet.set(idx);
+				clogItemsBitSet.set(idx);
 		}
 	}
 
@@ -454,21 +454,21 @@ public class WikiSyncPlugin extends Plugin
 					InputStream in = response.body().byteStream();
 					manifest = gson.fromJson(new InputStreamReader(in, StandardCharsets.UTF_8), Manifest.class);
 
-                    clientThread.invoke(() -> {
-                        HashSet<Integer> cacheClogIds = parseCacheForClog();
-                        manifest.collections.forEach(cacheClogIds::remove);
+					clientThread.invoke(() -> {
+						HashSet<Integer> cacheClogIds = parseCacheForClog();
+						manifest.collections.forEach(cacheClogIds::remove);
 
-                        // Add missing keys in order to the map. Order is extremely important here so
-                        // we get a stable map given the same cache data.
-                        ArrayList<Integer> differentKeys = new ArrayList<>(cacheClogIds);
-                        Collections.sort(differentKeys);
-                        int currentIndex = 0;
-                        for (Integer i : manifest.collections)
-                            collectionsMap.put(i, currentIndex++);
-                        for (Integer missingItemId : differentKeys) {
-                            collectionsMap.put(missingItemId, currentIndex++);
-                        }
-                    });
+						// Add missing keys in order to the map. Order is extremely important here so
+						// we get a stable map given the same cache data.
+						ArrayList<Integer> differentKeys = new ArrayList<>(cacheClogIds);
+						Collections.sort(differentKeys);
+						int currentIndex = 0;
+						for (Integer i : manifest.collections)
+							collectionsMap.put(i, currentIndex++);
+						for (Integer missingItemId : differentKeys) {
+							collectionsMap.put(missingItemId, currentIndex++);
+						}
+					});
 				}
 				catch (JsonParseException e)
 				{
