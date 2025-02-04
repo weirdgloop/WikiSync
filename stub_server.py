@@ -11,6 +11,7 @@ class TestResource:
         resp.media = {
             'varbits': [0, 100, 9657, 4101, 5000, 10000, 4104],
             'varps': [1, 3, 5, 6, 7, 10],
+            'collections': [],
             'version': 4
         }
         resp.status = falcon.HTTP_200

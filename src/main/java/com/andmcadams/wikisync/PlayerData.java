@@ -1,7 +1,6 @@
 package com.andmcadams.wikisync;
 
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -16,9 +15,15 @@ public class PlayerData
     Map<Integer, Integer> varb = new HashMap<>();
     Map<Integer, Integer> varp = new HashMap<>();
     Map<String, Integer> level = new HashMap<>();
+    String collectionLog = "";
 
     public boolean isEmpty()
     {
-        return varb.isEmpty() && varp.isEmpty() && level.isEmpty();
+        return varb.isEmpty() && varp.isEmpty() && level.isEmpty() && collectionLog.isEmpty();
+    }
+
+    public void clearCollectionLog()
+    {
+        collectionLog = "";
     }
 }

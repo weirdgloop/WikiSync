@@ -30,10 +30,10 @@ import com.google.gson.Gson;
 import com.google.gson.JsonParseException;
 import com.google.inject.Provides;
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.api.Client;
-import net.runelite.api.GameState;
-import net.runelite.api.Skill;
-import net.runelite.api.VarbitComposition;
+import net.runelite.api.*;
+import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.events.GameTick;
+import net.runelite.api.events.ScriptPreFired;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.config.RuneScapeProfileType;
@@ -51,9 +51,10 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.time.temporal.ChronoUnit;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 @Slf4j
 @PluginDescriptor(
@@ -88,6 +89,12 @@ public class WikiSyncPlugin extends Plugin
 	@Inject
 	private OkHttpClient okHttpClient;
 
+	@Inject
+	private SyncButtonManager syncButtonManager;
+
+	@Inject
+	private ScheduledExecutorService scheduledExecutorService;
+
 	private static final int SECONDS_BETWEEN_UPLOADS = 10;
 	private static final int SECONDS_BETWEEN_MANIFEST_CHECKS = 1200;
 
@@ -107,6 +114,13 @@ public class WikiSyncPlugin extends Plugin
 	private boolean webSocketStarted;
 	private int cyclesSinceSuccessfulCall = 0;
 
+	// Keeps track of what collection log slots the user has set.
+	private static final BitSet clogItemsBitSet = new BitSet();
+	// Map item ids to bit index in the bitset
+	private static final HashMap<Integer, Integer> collectionLogItemIdToBitsetIndex = new HashMap<>();
+	private boolean collectionLogScriptFired = false;
+	private HashSet<Integer> collectionLogItemIdsFromCache;
+
 	@Provides
 	WikiSyncConfig getConfig(ConfigManager configManager)
 	{
@@ -116,7 +130,9 @@ public class WikiSyncPlugin extends Plugin
 	@Override
 	public void startUp()
 	{
+		clogItemsBitSet.clear();
 		clientThread.invoke(() -> {
+			collectionLogItemIdsFromCache = parseCacheForClog();
 			if (client.getIndexConfig() == null || client.getGameState().ordinal() < GameState.LOGIN_SCREEN.ordinal())
 			{
 				log.debug("Failed to get varbitComposition, state = {}", client.getGameState());
@@ -134,6 +150,7 @@ public class WikiSyncPlugin extends Plugin
 		if (config.enableLocalWebSocketServer()) {
 			startUpWebSocketManager();
 		}
+		syncButtonManager.startUp();
 	}
 
 	private void startUpWebSocketManager()
@@ -148,7 +165,9 @@ public class WikiSyncPlugin extends Plugin
 	protected void shutDown()
 	{
 		log.debug("WikiSync stopped!");
+		clogItemsBitSet.clear();
 		shutDownWebSocketManager();
+		syncButtonManager.shutDown();
 	}
 
 	private void shutDownWebSocketManager()
@@ -157,6 +176,68 @@ public class WikiSyncPlugin extends Plugin
 		eventBus.unregister(webSocketManager);
 		eventBus.unregister(dpsDataFetcher);
 		webSocketStarted = false;
+	}
+
+	/**
+	 * Finds the index this itemId is assigned to in the collections mapping.
+	 * @param itemId: The itemId to look up
+	 * @return The index of the bit that represents the given itemId, if it is in the map. -1 otherwise.
+	 */
+	private int lookupCollectionLogItemIndex(int itemId) {
+		// The map has not loaded yet, or failed to load.
+		if (collectionLogItemIdToBitsetIndex.isEmpty()) {
+			return -1;
+		}
+		Integer result = collectionLogItemIdToBitsetIndex.get(itemId);
+		if (result == null) {
+			log.debug("Item id {} not found in the mapping of items", itemId);
+			return -1;
+		}
+		return result;
+	}
+
+	@Subscribe
+	public void onGameStateChanged(GameStateChanged event)
+	{
+		switch (event.getGameState())
+		{
+			// When hopping, we need to clear any state related to the player
+			case HOPPING:
+			case LOGGING_IN:
+			case CONNECTION_LOST:
+				clogItemsBitSet.clear();
+				break;
+		}
+	}
+
+	@Subscribe
+	public void onScriptPreFired(ScriptPreFired preFired) {
+		if (preFired.getScriptId() == 4100) {
+			collectionLogScriptFired = true;
+			if (collectionLogItemIdToBitsetIndex.isEmpty())
+			{
+				return;
+			}
+			Object[] args = preFired.getScriptEvent().getArguments();
+			int itemId = (int) args[1];
+			int idx = lookupCollectionLogItemIndex(itemId);
+			// We should never return -1 under normal circumstances
+			if (idx != -1)
+				clogItemsBitSet.set(idx);
+		}
+	}
+
+	@Subscribe
+	public void onGameTick(GameTick gameTick) {
+		// Fire a submit attempt after loading the collection log
+		if (collectionLogScriptFired) {
+			collectionLogScriptFired = false;
+			if(manifest == null) {
+				client.addChatMessage(ChatMessageType.CONSOLE, "WikiSync", "Failed to sync collection log. Try restarting the WikiSync plugin.", "WikiSync");
+				return;
+			}
+			scheduledExecutorService.execute(this::submitTask);
+		}
 	}
 
 	@Subscribe
@@ -177,7 +258,11 @@ public class WikiSyncPlugin extends Plugin
 		unit = ChronoUnit.SECONDS,
 		asynchronous = true
 	)
-	public void submitTask()
+	public void queueSubmitTask() {
+		scheduledExecutorService.execute(this::submitTask);
+	}
+
+	synchronized public void submitTask()
 	{
 		// TODO: do we want other GameStates?
 		if (client.getGameState() != GameState.LOGGED_IN || varbitCompositions.isEmpty())
@@ -251,6 +336,7 @@ public class WikiSyncPlugin extends Plugin
 		{
 			out.level.put(s.getName(), client.getRealSkillLevel(s));
 		}
+		out.collectionLog = Base64.getEncoder().encodeToString(clogItemsBitSet.toByteArray());
 		return out;
 	}
 
@@ -259,6 +345,8 @@ public class WikiSyncPlugin extends Plugin
 		oldPlayerData.varb.forEach(newPlayerData.varb::remove);
 		oldPlayerData.varp.forEach(newPlayerData.varp::remove);
 		oldPlayerData.level.forEach(newPlayerData.level::remove);
+		if (newPlayerData.collectionLog.equals(oldPlayerData.collectionLog))
+			newPlayerData.clearCollectionLog();
 	}
 
 	private void merge(PlayerData oldPlayerData, PlayerData delta)
@@ -266,6 +354,7 @@ public class WikiSyncPlugin extends Plugin
 		oldPlayerData.varb.putAll(delta.varb);
 		oldPlayerData.varp.putAll(delta.varp);
 		oldPlayerData.level.putAll(delta.level);
+		oldPlayerData.collectionLog = delta.collectionLog;
 	}
 
 	private void submitPlayerData(PlayerProfile profileKey, PlayerData delta, PlayerData old)
@@ -344,6 +433,24 @@ public class WikiSyncPlugin extends Plugin
 					}
 					InputStream in = response.body().byteStream();
 					manifest = gson.fromJson(new InputStreamReader(in, StandardCharsets.UTF_8), Manifest.class);
+
+					clientThread.invoke(() -> {
+						// Add missing keys in order to the map. Order is extremely important here so
+						// we get a stable map given the same cache data.
+						List<Integer> itemIdsMissingFromManifest = collectionLogItemIdsFromCache
+                                .stream()
+                                .filter((t) -> !manifest.collections.contains(t))
+								.sorted()
+								.collect(Collectors.toList());
+
+                        int currentIndex = 0;
+						collectionLogItemIdToBitsetIndex.clear();
+						for (Integer itemId : manifest.collections)
+							collectionLogItemIdToBitsetIndex.put(itemId, currentIndex++);
+						for (Integer missingItemId : itemIdsMissingFromManifest) {
+							collectionLogItemIdToBitsetIndex.put(missingItemId, currentIndex++);
+						}
+					});
 				}
 				catch (JsonParseException e)
 				{
@@ -370,4 +477,50 @@ public class WikiSyncPlugin extends Plugin
 			webSocketManager.ensureActive();
 		}
 	}
+
+	/**
+	 * Parse the enums and structs in the cache to figure out which item ids
+	 * exist in the collection log. This can be diffed with the manifest to
+	 * determine the item ids that need to be appended to the end of the
+	 * bitset we send to the WikiSync server.
+	 */
+	private HashSet<Integer> parseCacheForClog()
+	{
+		HashSet<Integer> itemIds = new HashSet<>();
+		// 2102 - Struct that contains the highest level tabs in the collection log (Bosses, Raids, etc)
+		// https://chisel.weirdgloop.org/structs/index.html?type=enums&id=2102
+		int[] topLevelTabStructIds = client.getEnum(2102).getIntVals();
+		for (int topLevelTabStructIndex : topLevelTabStructIds)
+		{
+			// The collection log top level tab structs contain a param that points to the enum
+			// that contains the pointers to sub tabs.
+			// ex: https://chisel.weirdgloop.org/structs/index.html?type=structs&id=471
+			StructComposition topLevelTabStruct = client.getStructComposition(topLevelTabStructIndex);
+
+			// Param 683 contains the pointer to the enum that contains the subtabs ids
+			// ex: https://chisel.weirdgloop.org/structs/index.html?type=enums&id=2103
+			int[] subtabStructIndices = client.getEnum(topLevelTabStruct.getIntValue(683)).getIntVals();
+			for (int subtabStructIndex : subtabStructIndices) {
+
+				// The subtab structs are for subtabs in the collection log (Commander Zilyana, Chambers of Xeric, etc.)
+				// and contain a pointer to the enum that contains all the item ids for that tab.
+				// ex subtab struct: https://chisel.weirdgloop.org/structs/index.html?type=structs&id=476
+				// ex subtab enum: https://chisel.weirdgloop.org/structs/index.html?type=enums&id=2109
+				StructComposition subtabStruct = client.getStructComposition(subtabStructIndex);
+				int[] clogItems = client.getEnum(subtabStruct.getIntValue(690)).getIntVals();
+				for (int clogItemId : clogItems) itemIds.add(clogItemId);
+			}
+		}
+
+		// Some items with data saved on them have replacements to fix a duping issue (satchels, flamtaer bag)
+		// Enum 3721 contains a mapping of the item ids to replace -> ids to replace them with
+		EnumComposition replacements = client.getEnum(3721);
+		for (int badItemId : replacements.getKeys())
+			itemIds.remove(badItemId);
+		for (int goodItemId : replacements.getIntVals())
+			itemIds.add(goodItemId);
+
+		return itemIds;
+	}
+
 }
