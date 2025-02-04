@@ -32,6 +32,7 @@ import com.google.inject.Provides;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.*;
 import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.events.GameTick;
 import net.runelite.api.events.ScriptPreFired;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
@@ -51,6 +52,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
@@ -89,6 +91,9 @@ public class WikiSyncPlugin extends Plugin
 	@Inject
 	private SyncButtonManager syncButtonManager;
 
+	@Inject
+	private ScheduledExecutorService scheduledExecutorService;
+
 	private static final int SECONDS_BETWEEN_UPLOADS = 10;
 	private static final int SECONDS_BETWEEN_MANIFEST_CHECKS = 1200;
 
@@ -110,7 +115,9 @@ public class WikiSyncPlugin extends Plugin
 
     // Keeps track of what collection log slots the user has set.
     private static final BitSet clogItemsBitSet = new BitSet();
+	// Map item ids to bit index in the bitset
     private static final HashMap<Integer, Integer> collectionsMap = new HashMap<>();
+	private boolean collectionLogScriptFired = false;
 
     @Provides
 	WikiSyncConfig getConfig(ConfigManager configManager)
@@ -233,6 +240,7 @@ public class WikiSyncPlugin extends Plugin
 				log.error("Manifest has no collections data");
 				return;
 			}
+			collectionLogScriptFired = true;
 
 			Object[] args = preFired.getScriptEvent().getArguments();
 			int itemId = (int) args[1];
@@ -240,6 +248,15 @@ public class WikiSyncPlugin extends Plugin
             // We should never return -1 under normal circumstances
 			if (idx != -1)
                 clogItemsBitSet.set(idx);
+		}
+	}
+
+	@Subscribe
+	public void onGameTick(GameTick gameTick) {
+		// Fire a submit attempt after loading the collection log
+		if (collectionLogScriptFired) {
+			scheduledExecutorService.execute(this::submitTask);
+			collectionLogScriptFired = false;
 		}
 	}
 
@@ -261,7 +278,11 @@ public class WikiSyncPlugin extends Plugin
 		unit = ChronoUnit.SECONDS,
 		asynchronous = true
 	)
-	public void submitTask()
+	public void queueSubmitTask() {
+		scheduledExecutorService.execute(this::submitTask);
+	}
+
+	synchronized public void submitTask()
 	{
 		// TODO: do we want other GameStates?
 		if (client.getGameState() != GameState.LOGGED_IN || varbitCompositions.isEmpty())
