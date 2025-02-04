@@ -99,10 +99,8 @@ public class WikiSyncPlugin extends Plugin
 	private static final int SECONDS_BETWEEN_UPLOADS = 10;
 	private static final int SECONDS_BETWEEN_MANIFEST_CHECKS = 1200;
 
-//	private static final String MANIFEST_URL = "https://sync.runescape.wiki/runelite/manifest";
-//	private static final String SUBMIT_URL = "https://sync.runescape.wiki/runelite/submit";
-	private static final String MANIFEST_URL = "http://localhost:3000/runelite/manifest";
-	private static final String SUBMIT_URL = "http://localhost:3000/runelite/submit";
+	private static final String MANIFEST_URL = "https://sync.runescape.wiki/runelite/manifest";
+	private static final String SUBMIT_URL = "https://sync.runescape.wiki/runelite/submit";
 	private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
 
 	private static final int VARBITS_ARCHIVE_ID = 14;
