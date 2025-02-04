@@ -112,7 +112,7 @@ public class SyncButtonManager {
 
     void onButtonClick() {
         client.menuAction(-1, 40697932, MenuAction.CC_OP, 1, -1, "Search", null);
-        client.menuAction(-1, 40697932, MenuAction.CC_OP, 1, -1, "Back", null);
+        client.runScript(2240);
         client.addChatMessage(ChatMessageType.CONSOLE, "WikiSync", "Your collection log data is being sent to WikiSync...", "WikiSync");
     }
 
