@@ -33,6 +33,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.*;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
+import net.runelite.api.events.ItemContainerChanged;
 import net.runelite.api.events.ScriptPreFired;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
@@ -54,6 +55,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 @Slf4j
 @PluginDescriptor(
@@ -97,8 +99,10 @@ public class WikiSyncPlugin extends Plugin
 	private static final int SECONDS_BETWEEN_UPLOADS = 10;
 	private static final int SECONDS_BETWEEN_MANIFEST_CHECKS = 1200;
 
-	private static final String MANIFEST_URL = "https://sync.runescape.wiki/runelite/manifest";
-	private static final String SUBMIT_URL = "https://sync.runescape.wiki/runelite/submit";
+//	private static final String MANIFEST_URL = "https://sync.runescape.wiki/runelite/manifest";
+//	private static final String SUBMIT_URL = "https://sync.runescape.wiki/runelite/submit";
+	private static final String MANIFEST_URL = "http://localhost:3000/runelite/manifest";
+	private static final String SUBMIT_URL = "http://localhost:3000/runelite/submit";
 	private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
 
 	private static final int VARBITS_ARCHIVE_ID = 14;
@@ -116,8 +120,9 @@ public class WikiSyncPlugin extends Plugin
 	// Keeps track of what collection log slots the user has set.
 	private static final BitSet clogItemsBitSet = new BitSet();
 	// Map item ids to bit index in the bitset
-	private static final HashMap<Integer, Integer> collectionsMap = new HashMap<>();
+	private static final HashMap<Integer, Integer> collectionLogItemIdToBitsetIndex = new HashMap<>();
 	private boolean collectionLogScriptFired = false;
+	private HashSet<Integer> collectionLogItemIdsFromCache;
 
 	@Provides
 	WikiSyncConfig getConfig(ConfigManager configManager)
@@ -130,6 +135,7 @@ public class WikiSyncPlugin extends Plugin
 	{
 		clogItemsBitSet.clear();
 		clientThread.invoke(() -> {
+			collectionLogItemIdsFromCache = parseCacheForClog();
 			if (client.getIndexConfig() == null || client.getGameState().ordinal() < GameState.LOGIN_SCREEN.ordinal())
 			{
 				log.debug("Failed to get varbitComposition, state = {}", client.getGameState());
@@ -148,31 +154,6 @@ public class WikiSyncPlugin extends Plugin
 			startUpWebSocketManager();
 		}
 		syncButtonManager.startUp();
-	}
-
-	private HashSet<Integer> parseCacheForClog()
-	{
-		HashSet<Integer> itemIds = new HashSet<>();
-		int[] topLevelStructs = client.getEnum(2102).getIntVals();
-		for (int topLevelStructIndex : topLevelStructs)
-		{
-			StructComposition s = client.getStructComposition(topLevelStructIndex);
-			int[] substructIndices = client.getEnum(s.getIntValue(683)).getIntVals();
-			for (int substructIndex : substructIndices) {
-				StructComposition s2 = client.getStructComposition(substructIndex);
-				int[] clogItems = client.getEnum(s2.getIntValue(690)).getIntVals();
-				for (int clogItemId : clogItems) itemIds.add(clogItemId);
-			}
-		}
-
-		// Some items with data saved on them have replacements to fix a duping issue
-		EnumComposition replacements = client.getEnum(3721);
-		for (int badItemId : replacements.getKeys())
-			itemIds.remove(badItemId);
-		for (int goodItemId : replacements.getIntVals())
-			itemIds.add(goodItemId);
-
-		return itemIds;
 	}
 
 	private void startUpWebSocketManager()
@@ -205,12 +186,12 @@ public class WikiSyncPlugin extends Plugin
 	 * @param itemId: The itemId to look up
 	 * @return The index of the bit that represents the given itemId, if it is in the map. -1 otherwise.
 	 */
-	private int lookupItemIndex(int itemId) {
+	private int lookupCollectionLogItemIndex(int itemId) {
 		// The map has not loaded yet, or failed to load.
-		if (collectionsMap.isEmpty()) {
+		if (collectionLogItemIdToBitsetIndex.isEmpty()) {
 			return -1;
 		}
-		Integer result = collectionsMap.get(itemId);
+		Integer result = collectionLogItemIdToBitsetIndex.get(itemId);
 		if (result == null) {
 			log.error("Item id {} not found in the mapping of items", itemId);
 			return -1;
@@ -235,7 +216,7 @@ public class WikiSyncPlugin extends Plugin
 	@Subscribe
 	public void onScriptPreFired(ScriptPreFired preFired) {
 		if (preFired.getScriptId() == 4100) {
-			if (collectionsMap.isEmpty())
+			if (collectionLogItemIdToBitsetIndex.isEmpty())
 			{
 				log.error("Manifest has no collections data");
 				return;
@@ -244,7 +225,7 @@ public class WikiSyncPlugin extends Plugin
 
 			Object[] args = preFired.getScriptEvent().getArguments();
 			int itemId = (int) args[1];
-			int idx = lookupItemIndex(itemId);
+			int idx = lookupCollectionLogItemIndex(itemId);
 			// We should never return -1 under normal circumstances
 			if (idx != -1)
 				clogItemsBitSet.set(idx);
@@ -455,18 +436,20 @@ public class WikiSyncPlugin extends Plugin
 					manifest = gson.fromJson(new InputStreamReader(in, StandardCharsets.UTF_8), Manifest.class);
 
 					clientThread.invoke(() -> {
-						HashSet<Integer> cacheClogIds = parseCacheForClog();
-						manifest.collections.forEach(cacheClogIds::remove);
-
 						// Add missing keys in order to the map. Order is extremely important here so
 						// we get a stable map given the same cache data.
-						ArrayList<Integer> differentKeys = new ArrayList<>(cacheClogIds);
-						Collections.sort(differentKeys);
-						int currentIndex = 0;
-						for (Integer i : manifest.collections)
-							collectionsMap.put(i, currentIndex++);
-						for (Integer missingItemId : differentKeys) {
-							collectionsMap.put(missingItemId, currentIndex++);
+						List<Integer> itemIdsMissingFromManifest = collectionLogItemIdsFromCache
+                                .stream()
+                                .filter((t) -> !manifest.collections.contains(t))
+								.sorted()
+								.collect(Collectors.toList());
+
+                        int currentIndex = 0;
+						collectionLogItemIdToBitsetIndex.clear();
+						for (Integer itemId : manifest.collections)
+							collectionLogItemIdToBitsetIndex.put(itemId, currentIndex++);
+						for (Integer missingItemId : itemIdsMissingFromManifest) {
+							collectionLogItemIdToBitsetIndex.put(missingItemId, currentIndex++);
 						}
 					});
 				}
@@ -495,4 +478,50 @@ public class WikiSyncPlugin extends Plugin
 			webSocketManager.ensureActive();
 		}
 	}
+
+	/**
+	 * Parse the enums and structs in the cache to figure out which item ids
+	 * exist in the collection log. This can be diffed with the manifest to
+	 * determine the item ids that need to be appended to the end of the
+	 * bitset we send to the WikiSync server.
+	 */
+	private HashSet<Integer> parseCacheForClog()
+	{
+		HashSet<Integer> itemIds = new HashSet<>();
+		// 2102 - Struct that contains the highest level tabs in the collection log (Bosses, Raids, etc)
+		// https://chisel.weirdgloop.org/structs/index.html?type=enums&id=2102
+		int[] topLevelTabStructIds = client.getEnum(2102).getIntVals();
+		for (int topLevelTabStructIndex : topLevelTabStructIds)
+		{
+			// The collection log top level tab structs contain a param that points to the enum
+			// that contains the pointers to sub tabs.
+			// ex: https://chisel.weirdgloop.org/structs/index.html?type=structs&id=471
+			StructComposition topLevelTabStruct = client.getStructComposition(topLevelTabStructIndex);
+
+			// Param 683 contains the pointer to the enum that contains the subtabs ids
+			// ex: https://chisel.weirdgloop.org/structs/index.html?type=enums&id=2103
+			int[] subtabStructIndices = client.getEnum(topLevelTabStruct.getIntValue(683)).getIntVals();
+			for (int subtabStructIndex : subtabStructIndices) {
+
+				// The subtab structs are for subtabs in the collection log (Commander Zilyana, Chambers of Xeric, etc.)
+				// and contain a pointer to the enum that contains all the item ids for that tab.
+				// ex subtab struct: https://chisel.weirdgloop.org/structs/index.html?type=structs&id=476
+				// ex subtab enum: https://chisel.weirdgloop.org/structs/index.html?type=enums&id=2109
+				StructComposition subtabStruct = client.getStructComposition(subtabStructIndex);
+				int[] clogItems = client.getEnum(subtabStruct.getIntValue(690)).getIntVals();
+				for (int clogItemId : clogItems) itemIds.add(clogItemId);
+			}
+		}
+
+		// Some items with data saved on them have replacements to fix a duping issue (satchels, flamtaer bag)
+		// Enum 3721 contains a mapping of the item ids to replace -> ids to replace them with
+		EnumComposition replacements = client.getEnum(3721);
+		for (int badItemId : replacements.getKeys())
+			itemIds.remove(badItemId);
+		for (int goodItemId : replacements.getIntVals())
+			itemIds.add(goodItemId);
+
+		return itemIds;
+	}
+
 }
