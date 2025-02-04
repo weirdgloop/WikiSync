@@ -33,7 +33,6 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.*;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
-import net.runelite.api.events.ItemContainerChanged;
 import net.runelite.api.events.ScriptPreFired;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
@@ -191,7 +190,7 @@ public class WikiSyncPlugin extends Plugin
 		}
 		Integer result = collectionLogItemIdToBitsetIndex.get(itemId);
 		if (result == null) {
-			log.error("Item id {} not found in the mapping of items", itemId);
+			log.debug("Item id {} not found in the mapping of items", itemId);
 			return -1;
 		}
 		return result;
@@ -214,13 +213,11 @@ public class WikiSyncPlugin extends Plugin
 	@Subscribe
 	public void onScriptPreFired(ScriptPreFired preFired) {
 		if (preFired.getScriptId() == 4100) {
+			collectionLogScriptFired = true;
 			if (collectionLogItemIdToBitsetIndex.isEmpty())
 			{
-				log.error("Manifest has no collections data");
 				return;
 			}
-			collectionLogScriptFired = true;
-
 			Object[] args = preFired.getScriptEvent().getArguments();
 			int itemId = (int) args[1];
 			int idx = lookupCollectionLogItemIndex(itemId);
@@ -234,8 +231,12 @@ public class WikiSyncPlugin extends Plugin
 	public void onGameTick(GameTick gameTick) {
 		// Fire a submit attempt after loading the collection log
 		if (collectionLogScriptFired) {
-			scheduledExecutorService.execute(this::submitTask);
 			collectionLogScriptFired = false;
+			if(manifest == null) {
+				client.addChatMessage(ChatMessageType.CONSOLE, "WikiSync", "Failed to sync collection log. Try restarting the WikiSync plugin.", "WikiSync");
+				return;
+			}
+			scheduledExecutorService.execute(this::submitTask);
 		}
 	}
 
