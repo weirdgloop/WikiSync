@@ -116,6 +116,7 @@ public class WikiSyncPlugin extends Plugin
 
 	// Keeps track of what collection log slots the user has set.
 	private static final BitSet clogItemsBitSet = new BitSet();
+	private static Integer clogItemsCount = null;
 	// Map item ids to bit index in the bitset
 	private static final HashMap<Integer, Integer> collectionLogItemIdToBitsetIndex = new HashMap<>();
 	private boolean collectionLogScriptFired = false;
@@ -231,6 +232,7 @@ public class WikiSyncPlugin extends Plugin
 	public void onGameTick(GameTick gameTick) {
 		// Fire a submit attempt after loading the collection log
 		if (collectionLogScriptFired) {
+			clogItemsCount = collectionLogItemIdsFromCache.size();
 			syncButtonManager.setAwaitingSync(false);
 			collectionLogScriptFired = false;
 			if(manifest == null) {
@@ -338,6 +340,7 @@ public class WikiSyncPlugin extends Plugin
 			out.level.put(s.getName(), client.getRealSkillLevel(s));
 		}
 		out.collectionLog = Base64.getEncoder().encodeToString(clogItemsBitSet.toByteArray());
+		out.collectionLogItemCount = clogItemsCount;
 		return out;
 	}
 
@@ -356,6 +359,7 @@ public class WikiSyncPlugin extends Plugin
 		oldPlayerData.varp.putAll(delta.varp);
 		oldPlayerData.level.putAll(delta.level);
 		oldPlayerData.collectionLog = delta.collectionLog;
+		oldPlayerData.collectionLogItemCount = delta.collectionLogItemCount;
 	}
 
 	private void submitPlayerData(PlayerProfile profileKey, PlayerData delta, PlayerData old)
