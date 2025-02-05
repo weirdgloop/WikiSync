@@ -212,7 +212,7 @@ public class WikiSyncPlugin extends Plugin
 
 	@Subscribe
 	public void onScriptPreFired(ScriptPreFired preFired) {
-		if (preFired.getScriptId() == 4100) {
+		if (syncButtonManager.isAwaitingSync() && preFired.getScriptId() == 4100) {
 			collectionLogScriptFired = true;
 			if (collectionLogItemIdToBitsetIndex.isEmpty())
 			{
@@ -231,6 +231,7 @@ public class WikiSyncPlugin extends Plugin
 	public void onGameTick(GameTick gameTick) {
 		// Fire a submit attempt after loading the collection log
 		if (collectionLogScriptFired) {
+			syncButtonManager.setAwaitingSync(false);
 			collectionLogScriptFired = false;
 			if(manifest == null) {
 				client.addChatMessage(ChatMessageType.CONSOLE, "WikiSync", "Failed to sync collection log. Try restarting the WikiSync plugin.", "WikiSync");

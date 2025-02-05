@@ -3,6 +3,7 @@ package com.andmcadams.wikisync;
 import com.google.inject.Inject;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.*;
 import net.runelite.api.annotations.Component;
@@ -51,6 +52,10 @@ public class SyncButtonManager {
     private final ClientThread clientThread;
     private final EventBus eventBus;
 
+    @Getter
+    @Setter
+    private boolean awaitingSync;
+
     @Inject
     private SyncButtonManager(
             Client client,
@@ -65,6 +70,7 @@ public class SyncButtonManager {
 
     public void startUp()
     {
+        setAwaitingSync(false);
         eventBus.register(this);
         clientThread.invokeLater(() -> tryAddButton(this::onButtonClick));
     }
@@ -111,6 +117,7 @@ public class SyncButtonManager {
     }
 
     void onButtonClick() {
+        setAwaitingSync(true);
         client.menuAction(-1, 40697932, MenuAction.CC_OP, 1, -1, "Search", null);
         client.runScript(2240);
         client.addChatMessage(ChatMessageType.CONSOLE, "WikiSync", "Your collection log data is being sent to WikiSync...", "WikiSync");
