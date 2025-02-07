@@ -16,16 +16,16 @@ public class PlayerData
     Map<Integer, Integer> varp = new HashMap<>();
     Map<String, Integer> level = new HashMap<>();
     Integer collectionLogItemCount = null;
-    String collectionLog = "";
+    String collectionLogSlots = "";
 
     public boolean isEmpty()
     {
-        return varb.isEmpty() && varp.isEmpty() && level.isEmpty() && collectionLog.isEmpty() && collectionLogItemCount == null;
+        return varb.isEmpty() && varp.isEmpty() && level.isEmpty() && collectionLogSlots.isEmpty() && collectionLogItemCount == null;
     }
 
     public void clearCollectionLog()
     {
-        collectionLog = "";
+        collectionLogSlots = "";
         collectionLogItemCount = null;
     }
 }

@@ -339,7 +339,7 @@ public class WikiSyncPlugin extends Plugin
 		{
 			out.level.put(s.getName(), client.getRealSkillLevel(s));
 		}
-		out.collectionLog = Base64.getEncoder().encodeToString(clogItemsBitSet.toByteArray());
+		out.collectionLogSlots = Base64.getEncoder().encodeToString(clogItemsBitSet.toByteArray());
 		out.collectionLogItemCount = clogItemsCount;
 		return out;
 	}
@@ -349,7 +349,7 @@ public class WikiSyncPlugin extends Plugin
 		oldPlayerData.varb.forEach(newPlayerData.varb::remove);
 		oldPlayerData.varp.forEach(newPlayerData.varp::remove);
 		oldPlayerData.level.forEach(newPlayerData.level::remove);
-		if (newPlayerData.collectionLog.equals(oldPlayerData.collectionLog))
+		if (newPlayerData.collectionLogSlots.equals(oldPlayerData.collectionLogSlots))
 			newPlayerData.clearCollectionLog();
 	}
 
@@ -358,7 +358,7 @@ public class WikiSyncPlugin extends Plugin
 		oldPlayerData.varb.putAll(delta.varb);
 		oldPlayerData.varp.putAll(delta.varp);
 		oldPlayerData.level.putAll(delta.level);
-		oldPlayerData.collectionLog = delta.collectionLog;
+		oldPlayerData.collectionLogSlots = delta.collectionLogSlots;
 		oldPlayerData.collectionLogItemCount = delta.collectionLogItemCount;
 	}
 
