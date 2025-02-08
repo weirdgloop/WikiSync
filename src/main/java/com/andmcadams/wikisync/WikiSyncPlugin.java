@@ -119,7 +119,7 @@ public class WikiSyncPlugin extends Plugin
 	private static Integer clogItemsCount = null;
 	// Map item ids to bit index in the bitset
 	private static final HashMap<Integer, Integer> collectionLogItemIdToBitsetIndex = new HashMap<>();
-	private boolean collectionLogScriptFired = false;
+	private int tickCollectionLogScriptFired = -1;
 	private HashSet<Integer> collectionLogItemIdsFromCache;
 
 	@Provides
@@ -213,12 +213,13 @@ public class WikiSyncPlugin extends Plugin
 
 	@Subscribe
 	public void onScriptPreFired(ScriptPreFired preFired) {
-		if (syncButtonManager.isAwaitingSync() && preFired.getScriptId() == 4100) {
-			collectionLogScriptFired = true;
+		if (syncButtonManager.isSyncAllowed() && preFired.getScriptId() == 4100) {
+			tickCollectionLogScriptFired = client.getTickCount();
 			if (collectionLogItemIdToBitsetIndex.isEmpty())
 			{
 				return;
 			}
+			clogItemsCount = collectionLogItemIdsFromCache.size();
 			Object[] args = preFired.getScriptEvent().getArguments();
 			int itemId = (int) args[1];
 			int idx = lookupCollectionLogItemIndex(itemId);
@@ -230,12 +231,11 @@ public class WikiSyncPlugin extends Plugin
 
 	@Subscribe
 	public void onGameTick(GameTick gameTick) {
-		// Fire a submit attempt after loading the collection log
-		if (collectionLogScriptFired) {
-			clogItemsCount = collectionLogItemIdsFromCache.size();
-			syncButtonManager.setAwaitingSync(false);
-			collectionLogScriptFired = false;
-			if(manifest == null) {
+		// Submit the collection log data two ticks after the first script prefires
+		if (tickCollectionLogScriptFired != -1 &&
+				tickCollectionLogScriptFired + 2 > client.getTickCount()) {
+			tickCollectionLogScriptFired = -1;
+			if (manifest == null) {
 				client.addChatMessage(ChatMessageType.CONSOLE, "WikiSync", "Failed to sync collection log. Try restarting the WikiSync plugin.", "WikiSync");
 				return;
 			}
@@ -339,7 +339,7 @@ public class WikiSyncPlugin extends Plugin
 		{
 			out.level.put(s.getName(), client.getRealSkillLevel(s));
 		}
-		out.collectionLog = Base64.getEncoder().encodeToString(clogItemsBitSet.toByteArray());
+		out.collectionLogSlots = Base64.getEncoder().encodeToString(clogItemsBitSet.toByteArray());
 		out.collectionLogItemCount = clogItemsCount;
 		return out;
 	}
@@ -349,7 +349,7 @@ public class WikiSyncPlugin extends Plugin
 		oldPlayerData.varb.forEach(newPlayerData.varb::remove);
 		oldPlayerData.varp.forEach(newPlayerData.varp::remove);
 		oldPlayerData.level.forEach(newPlayerData.level::remove);
-		if (newPlayerData.collectionLog.equals(oldPlayerData.collectionLog))
+		if (newPlayerData.collectionLogSlots.equals(oldPlayerData.collectionLogSlots))
 			newPlayerData.clearCollectionLog();
 	}
 
@@ -358,7 +358,7 @@ public class WikiSyncPlugin extends Plugin
 		oldPlayerData.varb.putAll(delta.varb);
 		oldPlayerData.varp.putAll(delta.varp);
 		oldPlayerData.level.putAll(delta.level);
-		oldPlayerData.collectionLog = delta.collectionLog;
+		oldPlayerData.collectionLogSlots = delta.collectionLogSlots;
 		oldPlayerData.collectionLogItemCount = delta.collectionLogItemCount;
 	}
 

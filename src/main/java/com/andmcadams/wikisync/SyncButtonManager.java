@@ -54,7 +54,7 @@ public class SyncButtonManager {
 
     @Getter
     @Setter
-    private boolean awaitingSync;
+    private boolean syncAllowed;
 
     @Inject
     private SyncButtonManager(
@@ -70,7 +70,7 @@ public class SyncButtonManager {
 
     public void startUp()
     {
-        setAwaitingSync(false);
+        setSyncAllowed(false);
         eventBus.register(this);
         clientThread.invokeLater(() -> tryAddButton(this::onButtonClick));
     }
@@ -117,7 +117,7 @@ public class SyncButtonManager {
     }
 
     void onButtonClick() {
-        setAwaitingSync(true);
+        setSyncAllowed(true);
         client.menuAction(-1, 40697932, MenuAction.CC_OP, 1, -1, "Search", null);
         client.runScript(2240);
         client.addChatMessage(ChatMessageType.CONSOLE, "WikiSync", "Your collection log data is being sent to WikiSync...", "WikiSync");
