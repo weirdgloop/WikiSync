@@ -131,7 +131,6 @@ public class WikiSyncPlugin extends Plugin
 	@Override
 	public void startUp()
 	{
-		clogItemsBitSet.clear();
 		clientThread.invoke(() -> {
 			if (client.getIndexConfig() == null || client.getGameState().ordinal() < GameState.LOGIN_SCREEN.ordinal())
 			{
@@ -168,6 +167,7 @@ public class WikiSyncPlugin extends Plugin
 	{
 		log.debug("WikiSync stopped!");
 		clogItemsBitSet.clear();
+		clogItemsCount = null;
 		shutDownWebSocketManager();
 		syncButtonManager.shutDown();
 	}
@@ -208,6 +208,7 @@ public class WikiSyncPlugin extends Plugin
 			case LOGGING_IN:
 			case CONNECTION_LOST:
 				clogItemsBitSet.clear();
+				clogItemsCount = null;
 				break;
 		}
 	}
