@@ -120,7 +120,7 @@ public class WikiSyncPlugin extends Plugin
 	// Map item ids to bit index in the bitset
 	private static final HashMap<Integer, Integer> collectionLogItemIdToBitsetIndex = new HashMap<>();
 	private int tickCollectionLogScriptFired = -1;
-	private HashSet<Integer> collectionLogItemIdsFromCache;
+	private final HashSet<Integer> collectionLogItemIdsFromCache = new HashSet<>();
 
 	@Provides
 	WikiSyncConfig getConfig(ConfigManager configManager)
@@ -131,14 +131,14 @@ public class WikiSyncPlugin extends Plugin
 	@Override
 	public void startUp()
 	{
-		clogItemsBitSet.clear();
 		clientThread.invoke(() -> {
-			collectionLogItemIdsFromCache = parseCacheForClog();
 			if (client.getIndexConfig() == null || client.getGameState().ordinal() < GameState.LOGIN_SCREEN.ordinal())
 			{
 				log.debug("Failed to get varbitComposition, state = {}", client.getGameState());
 				return false;
 			}
+			collectionLogItemIdsFromCache.addAll(parseCacheForClog());
+			populateCollectionLogItemIdToBitsetIndex();
 			final int[] varbitIds = client.getIndexConfig().getFileIds(VARBITS_ARCHIVE_ID);
 			for (int id : varbitIds)
 			{
@@ -167,6 +167,7 @@ public class WikiSyncPlugin extends Plugin
 	{
 		log.debug("WikiSync stopped!");
 		clogItemsBitSet.clear();
+		clogItemsCount = null;
 		shutDownWebSocketManager();
 		syncButtonManager.shutDown();
 	}
@@ -207,6 +208,7 @@ public class WikiSyncPlugin extends Plugin
 			case LOGGING_IN:
 			case CONNECTION_LOST:
 				clogItemsBitSet.clear();
+				clogItemsCount = null;
 				break;
 		}
 	}
@@ -438,24 +440,7 @@ public class WikiSyncPlugin extends Plugin
 					}
 					InputStream in = response.body().byteStream();
 					manifest = gson.fromJson(new InputStreamReader(in, StandardCharsets.UTF_8), Manifest.class);
-
-					clientThread.invoke(() -> {
-						// Add missing keys in order to the map. Order is extremely important here so
-						// we get a stable map given the same cache data.
-						List<Integer> itemIdsMissingFromManifest = collectionLogItemIdsFromCache
-                                .stream()
-                                .filter((t) -> !manifest.collections.contains(t))
-								.sorted()
-								.collect(Collectors.toList());
-
-                        int currentIndex = 0;
-						collectionLogItemIdToBitsetIndex.clear();
-						for (Integer itemId : manifest.collections)
-							collectionLogItemIdToBitsetIndex.put(itemId, currentIndex++);
-						for (Integer missingItemId : itemIdsMissingFromManifest) {
-							collectionLogItemIdToBitsetIndex.put(missingItemId, currentIndex++);
-						}
-					});
+					populateCollectionLogItemIdToBitsetIndex();
 				}
 				catch (JsonParseException e)
 				{
@@ -481,6 +466,31 @@ public class WikiSyncPlugin extends Plugin
 		{
 			webSocketManager.ensureActive();
 		}
+	}
+
+	private void populateCollectionLogItemIdToBitsetIndex()
+	{
+		if (manifest == null)
+		{
+			log.debug("Manifest is not present so the collection log bitset index will not be updated");
+		}
+		clientThread.invoke(() -> {
+			// Add missing keys in order to the map. Order is extremely important here so
+			// we get a stable map given the same cache data.
+			List<Integer> itemIdsMissingFromManifest = collectionLogItemIdsFromCache
+					.stream()
+					.filter((t) -> !manifest.collections.contains(t))
+					.sorted()
+					.collect(Collectors.toList());
+
+			int currentIndex = 0;
+			collectionLogItemIdToBitsetIndex.clear();
+			for (Integer itemId : manifest.collections)
+				collectionLogItemIdToBitsetIndex.put(itemId, currentIndex++);
+			for (Integer missingItemId : itemIdsMissingFromManifest) {
+				collectionLogItemIdToBitsetIndex.put(missingItemId, currentIndex++);
+			}
+		});
 	}
 
 	/**
