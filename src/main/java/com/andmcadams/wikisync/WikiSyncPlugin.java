@@ -139,6 +139,7 @@ public class WikiSyncPlugin extends Plugin
 				return false;
 			}
 			collectionLogItemIdsFromCache.addAll(parseCacheForClog());
+			populateCollectionLogItemIdToBitsetIndex();
 			final int[] varbitIds = client.getIndexConfig().getFileIds(VARBITS_ARCHIVE_ID);
 			for (int id : varbitIds)
 			{
@@ -438,24 +439,7 @@ public class WikiSyncPlugin extends Plugin
 					}
 					InputStream in = response.body().byteStream();
 					manifest = gson.fromJson(new InputStreamReader(in, StandardCharsets.UTF_8), Manifest.class);
-
-					clientThread.invoke(() -> {
-						// Add missing keys in order to the map. Order is extremely important here so
-						// we get a stable map given the same cache data.
-						List<Integer> itemIdsMissingFromManifest = collectionLogItemIdsFromCache
-                                .stream()
-                                .filter((t) -> !manifest.collections.contains(t))
-								.sorted()
-								.collect(Collectors.toList());
-
-                        int currentIndex = 0;
-						collectionLogItemIdToBitsetIndex.clear();
-						for (Integer itemId : manifest.collections)
-							collectionLogItemIdToBitsetIndex.put(itemId, currentIndex++);
-						for (Integer missingItemId : itemIdsMissingFromManifest) {
-							collectionLogItemIdToBitsetIndex.put(missingItemId, currentIndex++);
-						}
-					});
+					populateCollectionLogItemIdToBitsetIndex();
 				}
 				catch (JsonParseException e)
 				{
@@ -481,6 +465,31 @@ public class WikiSyncPlugin extends Plugin
 		{
 			webSocketManager.ensureActive();
 		}
+	}
+
+	private void populateCollectionLogItemIdToBitsetIndex()
+	{
+		if (manifest == null)
+		{
+			log.debug("Manifest is not present so the collection log bitset index will not be updated");
+		}
+		clientThread.invoke(() -> {
+			// Add missing keys in order to the map. Order is extremely important here so
+			// we get a stable map given the same cache data.
+			List<Integer> itemIdsMissingFromManifest = collectionLogItemIdsFromCache
+					.stream()
+					.filter((t) -> !manifest.collections.contains(t))
+					.sorted()
+					.collect(Collectors.toList());
+
+			int currentIndex = 0;
+			collectionLogItemIdToBitsetIndex.clear();
+			for (Integer itemId : manifest.collections)
+				collectionLogItemIdToBitsetIndex.put(itemId, currentIndex++);
+			for (Integer missingItemId : itemIdsMissingFromManifest) {
+				collectionLogItemIdToBitsetIndex.put(missingItemId, currentIndex++);
+			}
+		});
 	}
 
 	/**
