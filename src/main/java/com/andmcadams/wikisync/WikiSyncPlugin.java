@@ -120,7 +120,7 @@ public class WikiSyncPlugin extends Plugin
 	// Map item ids to bit index in the bitset
 	private static final HashMap<Integer, Integer> collectionLogItemIdToBitsetIndex = new HashMap<>();
 	private int tickCollectionLogScriptFired = -1;
-	private HashSet<Integer> collectionLogItemIdsFromCache;
+	private final HashSet<Integer> collectionLogItemIdsFromCache = new HashSet<>();
 
 	@Provides
 	WikiSyncConfig getConfig(ConfigManager configManager)
@@ -133,12 +133,12 @@ public class WikiSyncPlugin extends Plugin
 	{
 		clogItemsBitSet.clear();
 		clientThread.invoke(() -> {
-			collectionLogItemIdsFromCache = parseCacheForClog();
 			if (client.getIndexConfig() == null || client.getGameState().ordinal() < GameState.LOGIN_SCREEN.ordinal())
 			{
 				log.debug("Failed to get varbitComposition, state = {}", client.getGameState());
 				return false;
 			}
+			collectionLogItemIdsFromCache.addAll(parseCacheForClog());
 			final int[] varbitIds = client.getIndexConfig().getFileIds(VARBITS_ARCHIVE_ID);
 			for (int id : varbitIds)
 			{
