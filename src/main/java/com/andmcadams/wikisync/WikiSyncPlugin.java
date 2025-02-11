@@ -473,6 +473,7 @@ public class WikiSyncPlugin extends Plugin
 		if (manifest == null)
 		{
 			log.debug("Manifest is not present so the collection log bitset index will not be updated");
+			return;
 		}
 		clientThread.invoke(() -> {
 			// Add missing keys in order to the map. Order is extremely important here so
