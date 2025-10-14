@@ -331,12 +331,20 @@ public class WikiSyncPlugin extends Plugin
 		PlayerData out = new PlayerData();
 		for (int varbitId : manifest.varbits)
 		{
-			out.varb.put(varbitId, getVarbitValue(varbitId));
+            try {
+			    out.varb.put(varbitId, getVarbitValue(varbitId));
+            } catch (ArrayIndexOutOfBoundsException e) {
+                log.debug("Unable to access varbit {}: {}", varbitId, e.toString());
+            }
 		}
 		for (int varpId : manifest.varps)
 		{
-			out.varp.put(varpId, client.getVarpValue(varpId));
-		}
+            try {
+                out.varp.put(varpId, client.getVarpValue(varpId));
+            } catch (ArrayIndexOutOfBoundsException e) {
+                log.debug("Unable to access varplayer {}: {}", varpId, e.toString());
+            }
+        }
 		for(Skill s : Skill.values())
 		{
 			out.level.put(s.getName(), client.getRealSkillLevel(s));
