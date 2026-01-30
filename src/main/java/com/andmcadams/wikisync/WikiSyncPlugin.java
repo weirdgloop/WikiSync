@@ -277,7 +277,7 @@ public class WikiSyncPlugin extends Plugin
 		RuneScapeProfileType profileType = RuneScapeProfileType.getCurrent(client);
 		PlayerProfile profileKey = new PlayerProfile(username, profileType);
 
-		PlayerData newPlayerData = getPlayerData(client);
+		PlayerData newPlayerData = getPlayerData();
 		PlayerData oldPlayerData = playerDataMap.computeIfAbsent(profileKey, k -> new PlayerData());
 
 		// Subtraction is done in place so newPlayerData becomes a map of only changed fields
@@ -303,7 +303,7 @@ public class WikiSyncPlugin extends Plugin
 	}
 
 
-	private PlayerData getPlayerData(Client client)
+	private PlayerData getPlayerData()
 	{
 		PlayerData out = new PlayerData();
 		for (int varbitId : manifest.varbits)
