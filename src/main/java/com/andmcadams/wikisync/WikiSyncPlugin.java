@@ -102,9 +102,6 @@ public class WikiSyncPlugin extends Plugin
 	private static final String SUBMIT_URL = "https://sync.runescape.wiki/runelite/submit";
 	private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
 
-	private static final int VARBITS_ARCHIVE_ID = 14;
-	private Map<Integer, VarbitComposition> varbitCompositions = new HashMap<>();
-
 	public static final String CONFIG_GROUP_KEY = "WikiSync";
 	// THIS VERSION SHOULD BE INCREMENTED EVERY RELEASE WHERE WE ADD A NEW TOGGLE
 	public static final int VERSION = 1;
@@ -132,18 +129,13 @@ public class WikiSyncPlugin extends Plugin
 	public void startUp()
 	{
 		clientThread.invoke(() -> {
-			if (client.getIndexConfig() == null || client.getGameState().ordinal() < GameState.LOGIN_SCREEN.ordinal())
+			if (client.getGameState().ordinal() < GameState.LOGIN_SCREEN.ordinal())
 			{
 				log.debug("Failed to get varbitComposition, state = {}", client.getGameState());
 				return false;
 			}
 			collectionLogItemIdsFromCache.addAll(parseCacheForClog());
 			populateCollectionLogItemIdToBitsetIndex();
-			final int[] varbitIds = client.getIndexConfig().getFileIds(VARBITS_ARCHIVE_ID);
-			for (int id : varbitIds)
-			{
-				varbitCompositions.put(id, client.getVarbit(id));
-			}
 			return true;
 		});
 
@@ -241,7 +233,7 @@ public class WikiSyncPlugin extends Plugin
 				client.addChatMessage(ChatMessageType.CONSOLE, "WikiSync", "Failed to sync collection log. Try restarting the WikiSync plugin.", "WikiSync");
 				return;
 			}
-			scheduledExecutorService.execute(this::submitTask);
+			scheduledExecutorService.execute(() -> clientThread.invoke(this::submitTask));
 		}
 	}
 
@@ -264,13 +256,13 @@ public class WikiSyncPlugin extends Plugin
 		asynchronous = true
 	)
 	public void queueSubmitTask() {
-		scheduledExecutorService.execute(this::submitTask);
+		scheduledExecutorService.execute(() -> clientThread.invoke(this::submitTask));
 	}
 
 	synchronized public void submitTask()
 	{
 		// TODO: do we want other GameStates?
-		if (client.getGameState() != GameState.LOGGED_IN || varbitCompositions.isEmpty())
+		if (client.getGameState() != GameState.LOGGED_IN)
 		{
 			return;
 		}
@@ -285,7 +277,7 @@ public class WikiSyncPlugin extends Plugin
 		RuneScapeProfileType profileType = RuneScapeProfileType.getCurrent(client);
 		PlayerProfile profileKey = new PlayerProfile(username, profileType);
 
-		PlayerData newPlayerData = getPlayerData();
+		PlayerData newPlayerData = getPlayerData(client);
 		PlayerData oldPlayerData = playerDataMap.computeIfAbsent(profileKey, k -> new PlayerData());
 
 		// Subtraction is done in place so newPlayerData becomes a map of only changed fields
@@ -311,28 +303,13 @@ public class WikiSyncPlugin extends Plugin
 	}
 
 
-	private int getVarbitValue(int varbitId)
-	{
-		VarbitComposition v = varbitCompositions.get(varbitId);
-		if (v == null)
-		{
-			return -1;
-		}
-
-		int value = client.getVarpValue(v.getIndex());
-		int lsb = v.getLeastSignificantBit();
-		int msb = v.getMostSignificantBit();
-		int mask = (1 << ((msb - lsb) + 1)) - 1;
-		return (value >> lsb) & mask;
-	}
-
-	private PlayerData getPlayerData()
+	private PlayerData getPlayerData(Client client)
 	{
 		PlayerData out = new PlayerData();
 		for (int varbitId : manifest.varbits)
 		{
             try {
-			    out.varb.put(varbitId, getVarbitValue(varbitId));
+			    out.varb.put(varbitId, client.getVarbitValue(varbitId));
             } catch (ArrayIndexOutOfBoundsException e) {
                 log.debug("Unable to access varbit {}: {}", varbitId, e.toString());
             }
