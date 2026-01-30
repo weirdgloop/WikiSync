@@ -131,7 +131,7 @@ public class WikiSyncPlugin extends Plugin
 		clientThread.invoke(() -> {
 			if (client.getGameState().ordinal() < GameState.LOGIN_SCREEN.ordinal())
 			{
-				log.debug("Failed to get varbitComposition, state = {}", client.getGameState());
+				log.debug("Too early to start up... state={}", client.getGameState());
 				return false;
 			}
 			collectionLogItemIdsFromCache.addAll(parseCacheForClog());
@@ -370,6 +370,7 @@ public class WikiSyncPlugin extends Plugin
 				.post(RequestBody.create(JSON, gson.toJson(submission)))
 				.build();
 
+		log.debug("Submitting data for {}", submission.getUsername());
 		Call call = okHttpClient.newCall(request);
 		call.timeout().timeout(3, TimeUnit.SECONDS);
 		call.enqueue(new Callback()
