@@ -249,11 +249,10 @@ public class WikiSyncPlugin extends Plugin
 
 	@Schedule(
 		period = SECONDS_BETWEEN_UPLOADS,
-		unit = ChronoUnit.SECONDS,
-		asynchronous = true
+		unit = ChronoUnit.SECONDS
 	)
 	public void queueSubmitTask() {
-		clientThread.invoke(this::submitTask);
+		submitTask();
 	}
 
 	synchronized public void submitTask()
