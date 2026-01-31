@@ -92,9 +92,6 @@ public class WikiSyncPlugin extends Plugin
 	@Inject
 	private SyncButtonManager syncButtonManager;
 
-	@Inject
-	private ScheduledExecutorService scheduledExecutorService;
-
 	private static final int SECONDS_BETWEEN_UPLOADS = 10;
 	private static final int SECONDS_BETWEEN_MANIFEST_CHECKS = 1200;
 
@@ -233,7 +230,7 @@ public class WikiSyncPlugin extends Plugin
 				client.addChatMessage(ChatMessageType.CONSOLE, "WikiSync", "Failed to sync collection log. Try restarting the WikiSync plugin.", "WikiSync");
 				return;
 			}
-			scheduledExecutorService.execute(() -> clientThread.invoke(this::submitTask));
+			submitTask();
 		}
 	}
 
@@ -256,7 +253,7 @@ public class WikiSyncPlugin extends Plugin
 		asynchronous = true
 	)
 	public void queueSubmitTask() {
-		scheduledExecutorService.execute(() -> clientThread.invoke(this::submitTask));
+		clientThread.invoke(this::submitTask);
 	}
 
 	synchronized public void submitTask()
