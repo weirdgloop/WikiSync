@@ -92,18 +92,12 @@ public class WikiSyncPlugin extends Plugin
 	@Inject
 	private SyncButtonManager syncButtonManager;
 
-	@Inject
-	private ScheduledExecutorService scheduledExecutorService;
-
 	private static final int SECONDS_BETWEEN_UPLOADS = 10;
 	private static final int SECONDS_BETWEEN_MANIFEST_CHECKS = 1200;
 
 	private static final String MANIFEST_URL = "https://sync.runescape.wiki/runelite/manifest";
 	private static final String SUBMIT_URL = "https://sync.runescape.wiki/runelite/submit";
 	private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
-
-	private static final int VARBITS_ARCHIVE_ID = 14;
-	private Map<Integer, VarbitComposition> varbitCompositions = new HashMap<>();
 
 	public static final String CONFIG_GROUP_KEY = "WikiSync";
 	// THIS VERSION SHOULD BE INCREMENTED EVERY RELEASE WHERE WE ADD A NEW TOGGLE
@@ -132,18 +126,13 @@ public class WikiSyncPlugin extends Plugin
 	public void startUp()
 	{
 		clientThread.invoke(() -> {
-			if (client.getIndexConfig() == null || client.getGameState().ordinal() < GameState.LOGIN_SCREEN.ordinal())
+			if (client.getGameState().ordinal() < GameState.LOGIN_SCREEN.ordinal())
 			{
-				log.debug("Failed to get varbitComposition, state = {}", client.getGameState());
+				log.debug("Too early to start up... state={}", client.getGameState());
 				return false;
 			}
 			collectionLogItemIdsFromCache.addAll(parseCacheForClog());
 			populateCollectionLogItemIdToBitsetIndex();
-			final int[] varbitIds = client.getIndexConfig().getFileIds(VARBITS_ARCHIVE_ID);
-			for (int id : varbitIds)
-			{
-				varbitCompositions.put(id, client.getVarbit(id));
-			}
 			return true;
 		});
 
@@ -241,7 +230,7 @@ public class WikiSyncPlugin extends Plugin
 				client.addChatMessage(ChatMessageType.CONSOLE, "WikiSync", "Failed to sync collection log. Try restarting the WikiSync plugin.", "WikiSync");
 				return;
 			}
-			scheduledExecutorService.execute(this::submitTask);
+			submitTask();
 		}
 	}
 
@@ -260,17 +249,16 @@ public class WikiSyncPlugin extends Plugin
 
 	@Schedule(
 		period = SECONDS_BETWEEN_UPLOADS,
-		unit = ChronoUnit.SECONDS,
-		asynchronous = true
+		unit = ChronoUnit.SECONDS
 	)
 	public void queueSubmitTask() {
-		scheduledExecutorService.execute(this::submitTask);
+		submitTask();
 	}
 
 	synchronized public void submitTask()
 	{
 		// TODO: do we want other GameStates?
-		if (client.getGameState() != GameState.LOGGED_IN || varbitCompositions.isEmpty())
+		if (client.getGameState() != GameState.LOGGED_IN)
 		{
 			return;
 		}
@@ -311,28 +299,13 @@ public class WikiSyncPlugin extends Plugin
 	}
 
 
-	private int getVarbitValue(int varbitId)
-	{
-		VarbitComposition v = varbitCompositions.get(varbitId);
-		if (v == null)
-		{
-			return -1;
-		}
-
-		int value = client.getVarpValue(v.getIndex());
-		int lsb = v.getLeastSignificantBit();
-		int msb = v.getMostSignificantBit();
-		int mask = (1 << ((msb - lsb) + 1)) - 1;
-		return (value >> lsb) & mask;
-	}
-
 	private PlayerData getPlayerData()
 	{
 		PlayerData out = new PlayerData();
 		for (int varbitId : manifest.varbits)
 		{
             try {
-			    out.varb.put(varbitId, getVarbitValue(varbitId));
+			    out.varb.put(varbitId, client.getVarbitValue(varbitId));
             } catch (ArrayIndexOutOfBoundsException e) {
                 log.debug("Unable to access varbit {}: {}", varbitId, e.toString());
             }
@@ -393,6 +366,7 @@ public class WikiSyncPlugin extends Plugin
 				.post(RequestBody.create(JSON, gson.toJson(submission)))
 				.build();
 
+		log.debug("Submitting data for {}", submission.getUsername());
 		Call call = okHttpClient.newCall(request);
 		call.timeout().timeout(3, TimeUnit.SECONDS);
 		call.enqueue(new Callback()
