@@ -132,6 +132,7 @@ public class DpsDataFetcher
 		skills.addProperty("prayer", client.getRealSkillLevel(Skill.PRAYER));
 		skills.addProperty("ranged", client.getRealSkillLevel(Skill.RANGED));
 		skills.addProperty("str", client.getRealSkillLevel(Skill.STRENGTH));
+		skills.addProperty("herblore", client.getRealSkillLevel(Skill.HERBLORE));
 		l.add("skills", skills);
 
 		JsonObject buffs = new JsonObject();
@@ -139,7 +140,26 @@ public class DpsDataFetcher
 		buffs.addProperty("kandarinDiary", client.getVarbitValue(VarbitID.KANDARIN_DIARY_HARD_COMPLETE) == 1);
 		buffs.addProperty("onSlayerTask", client.getVarpValue(VarPlayerID.SLAYER_COUNT) > 0);
 		buffs.addProperty("chargeSpell", client.getVarpValue(VarPlayerID.MAGEARENA_CHARGE) > 0);
+		buffs.addProperty("hasDeadeye", client.getVarbitValue(VarbitID.PRAYER_DEADEYE_UNLOCKED) > 0);
+		buffs.addProperty("hasMysticVigour", client.getVarbitValue(VarbitID.PRAYER_MYSTIC_VIGOUR_UNLOCKED) > 0);
+		buffs.addProperty("prayers", client.getVarbitValue(VarbitID.PRAYER_ALLACTIVE));
 		l.add("buffs", buffs);
+
+		JsonObject atkStyle = new JsonObject();
+		atkStyle.addProperty("comMode", client.getVarpValue(VarPlayerID.COM_MODE));
+		atkStyle.addProperty("castMode", client.getVarbitValue(VarbitID.AUTOCAST_DEFMODE));
+		atkStyle.addProperty("spell", client.getVarbitValue(VarbitID.AUTOCAST_SPELL));
+		l.add("atkStyle", atkStyle);
+
+		JsonObject league6 = new JsonObject();
+		league6.addProperty("mastery0", client.getVarpValue(VarPlayerID.COMBAT_MASTERY_PERM_0));
+		league6.addProperty("mastery1", client.getVarpValue(VarPlayerID.COMBAT_MASTERY_PERM_1));
+		league6.addProperty("mastery2", client.getVarpValue(VarPlayerID.COMBAT_MASTERY_PERM_2));
+		league6.addProperty("mastery3", client.getVarpValue(VarPlayerID.COMBAT_MASTERY_PERM_3));
+		league6.addProperty("mastery4", client.getVarpValue(VarPlayerID.COMBAT_MASTERY_PERM_4));
+		league6.addProperty("mastery5", client.getVarpValue(VarPlayerID.COMBAT_MASTERY_PERM_5));
+		l.add("league6", league6);
+
 
 		l.addProperty("name", client.getLocalPlayer().getName());
 
