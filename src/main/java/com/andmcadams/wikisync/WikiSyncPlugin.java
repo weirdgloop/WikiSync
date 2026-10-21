@@ -25,6 +25,7 @@
 package com.andmcadams.wikisync;
 
 import com.andmcadams.wikisync.dps.DpsDataFetcher;
+import com.andmcadams.wikisync.dps.OwnedItemsDataFetcher;
 import com.andmcadams.wikisync.dps.WebSocketManager;
 import com.google.gson.Gson;
 import com.google.gson.JsonParseException;
@@ -81,6 +82,9 @@ public class WikiSyncPlugin extends Plugin
 	private DpsDataFetcher dpsDataFetcher;
 
 	@Inject
+	private OwnedItemsDataFetcher ownedItemsDataFetcher;
+
+	@Inject
 	private WikiSyncConfig config;
 
 	@Inject
@@ -101,7 +105,7 @@ public class WikiSyncPlugin extends Plugin
 
 	public static final String CONFIG_GROUP_KEY = "WikiSync";
 	// THIS VERSION SHOULD BE INCREMENTED EVERY RELEASE WHERE WE ADD A NEW TOGGLE
-	public static final int VERSION = 1;
+	public static final int VERSION = 2;
 
 	private Manifest manifest;
 	private Map<PlayerProfile, PlayerData> playerDataMap = new HashMap<>();
@@ -148,6 +152,8 @@ public class WikiSyncPlugin extends Plugin
 		webSocketManager.startUp();
 		eventBus.register(webSocketManager);
 		eventBus.register(dpsDataFetcher);
+		clientThread.invokeLater(ownedItemsDataFetcher::reset);
+		eventBus.register(ownedItemsDataFetcher);
 		webSocketStarted = true;
 	}
 
@@ -166,6 +172,8 @@ public class WikiSyncPlugin extends Plugin
 		webSocketManager.shutDown();
 		eventBus.unregister(webSocketManager);
 		eventBus.unregister(dpsDataFetcher);
+		eventBus.unregister(ownedItemsDataFetcher);
+		clientThread.invokeLater(ownedItemsDataFetcher::reset);
 		webSocketStarted = false;
 	}
 

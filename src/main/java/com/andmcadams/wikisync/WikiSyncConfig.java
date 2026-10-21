@@ -33,6 +33,7 @@ public interface WikiSyncConfig extends Config
 {
 	String WIKISYNC_VERSION_KEYNAME = "version";
 	String ENABLE_LOCAL_WEB_SOCKET_SERVER_KEYNAME = "enableLocalWebSocketServer";
+	String ENABLE_LOCAL_OWNED_ITEMS_KEYNAME = "enableLocalOwnedItems";
 
 	@ConfigItem(keyName = WIKISYNC_VERSION_KEYNAME, name = "Version", description = "The last version of WikiSync used by the player", hidden = true)
 	default int wikiSyncVersion()
@@ -47,5 +48,13 @@ public interface WikiSyncConfig extends Config
 	default boolean enableLocalWebSocketServer()
 	{
 		return true;
+	}
+
+	@ConfigItem(keyName = ENABLE_LOCAL_OWNED_ITEMS_KEYNAME,
+		name = "Share owned items locally",
+		description = "Allow trusted local WebSocket clients to read bank, inventory and worn items. Open your bank after enabling. This data is not uploaded to the WikiSync server.")
+	default boolean enableLocalOwnedItems()
+	{
+		return false;
 	}
 }

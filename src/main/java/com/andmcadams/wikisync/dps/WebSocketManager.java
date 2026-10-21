@@ -1,6 +1,8 @@
 package com.andmcadams.wikisync.dps;
 
 import com.andmcadams.wikisync.dps.messages.response.GetPlayer;
+import com.andmcadams.wikisync.dps.messages.response.OwnedItemsResponse;
+import com.andmcadams.wikisync.dps.messages.RequestType;
 import com.andmcadams.wikisync.dps.messages.Request;
 import com.andmcadams.wikisync.dps.messages.response.UsernameChanged;
 import com.andmcadams.wikisync.dps.ws.WSHandler;
@@ -40,13 +42,13 @@ public class WebSocketManager implements WSHandler
 
 	private final Gson gson;
 	private final DpsDataFetcher dpsDataFetcher;
+	private final OwnedItemsDataFetcher ownedItemsDataFetcher;
 
 	private int nextPort;
 
 	private WSWebsocketServer server;
 
-	@Inject
-	private ClientThread clientThread;
+	private final ClientThread clientThread;
 
 	private static final ExecutorService executorService = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setDaemon(true).setNameFormat("wikisync-dps-manager-%d").build());
 
@@ -138,6 +140,23 @@ public class WebSocketManager implements WSHandler
 					executorService.submit(()->{
 						conn.send(gson.toJson(new GetPlayer(request.getSequenceId(), payload)));
 					});
+				});
+				break;
+			case GetOwnedItems:
+			case GetOwnedItemsStatus:
+				clientThread.invokeLater(() -> {
+					OwnedItemsResponse response;
+					try
+					{
+						JsonObject payload = ownedItemsDataFetcher.getPayload(request.get_wsType() == RequestType.GetOwnedItems);
+						response = new OwnedItemsResponse(request.get_wsType(), request.getSequenceId(), payload, null);
+					}
+					catch (IllegalStateException error)
+					{
+						response = new OwnedItemsResponse(request.get_wsType(), request.getSequenceId(), null, error.getMessage());
+					}
+					OwnedItemsResponse reply = response;
+					executorService.submit(() -> conn.send(gson.toJson(reply)));
 				});
 				break;
 			default:
